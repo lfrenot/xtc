@@ -1,0 +1,317 @@
+from abc import ABC
+import subprocess
+from collections import OrderedDict
+
+from xdsl.parser import Parser
+from xdsl.tools.command_line_tool import get_all_dialects
+from xdsl.transforms.mlir_opt import MLIROptPass
+from xdsl.ir import Block, Region, MLContext, Operation
+from xdsl.dialects.builtin import (
+    ModuleOp,
+    DenseIntOrFPElementsAttr,
+    TensorType,
+    MemRefType,
+    f32,
+    f64,
+)
+from xdsl.dialects import func,arith,linalg
+
+import transform
+
+transform_opt = "transform-interpreter"
+transform_opts = [f"--{transform_opt}","--test-transform-dialect-erase-schedule"]
+
+mliropt_opts = transform_opts + [
+    # "--allow-unregistered-dialect",
+    # "--mlir-print-op-generic",
+    "--canonicalize",
+    "--func-bufferize",
+    "--convert-linalg-to-loops",
+    "--convert-scf-to-cf",
+    "--canonicalize",
+    "--test-lower-to-llvm",
+]
+
+
+class Implementer:
+
+    count = 0
+    
+    def __init__(
+            self,
+            mlir_install_dir: str,
+            source_op: Operation,
+            dims: OrderedDict[str,int],
+    ):
+        #
+        self.mliropt = f"{mlir_install_dir}/bin/mlir-opt"
+        self.cmd_run_mlir = [
+            f"{mlir_install_dir}/bin/mlir-cpu-runner",
+            "-e", "main",
+            "--entry-point-result=void",
+            f"-shared-libs={mlir_install_dir}/lib/libmlir_runner_utils.so",
+            f"-shared-libs={mlir_install_dir}/lib/libmlir_c_runner_utils.so"
+        ]
+        #
+        self.source_op = source_op
+        self.payload_name = f"payload{Implementer.count}"
+        Implementer.count += 1
+        # TODO: should be computed
+        self.dims = dims
+        self.tiles = {k:{k:1} for k,v in self.dims.items()}
+        self.permutation = self.get_default_interchange()
+        self.vectorization = []
+        self.unrolling = OrderedDict([])
+
+    def payload(self):
+        # Fetch data
+        operands = self.source_op.operands
+        operands_types = [o.type for o in operands]
+        results_types = [r.type for r in self.source_op.results]
+        #
+        payload = Block(arg_types=operands_types)
+        new_op = self.source_op.clone(
+            value_mapper = {o:p for o,p in zip(operands,payload.args)},
+        )
+        payload.add_ops([new_op,func.Return(new_op)])
+        payload_func = func.FuncOp.from_region(
+            self.payload_name,
+            operands_types,
+            results_types,
+            Region(payload)
+        )
+        return payload_func
+
+    def inputs_init(self):
+        # Fetch data
+        operands = self.source_op.operands
+        operands_types = [o.type for o in operands]
+        #
+        return [
+            arith.Constant(DenseIntOrFPElementsAttr.tensor_from_list(
+                [1.0],
+                ty.get_element_type(),
+                ty.get_shape()
+            )) for ty in operands_types
+            ]
+
+    def uniquely_match(self):
+
+        dims = self.dims.values()
+        
+        sym_name,input_var,seq_sig = transform.get_seq_signature(
+            input_consumed = False,
+            has_output = True,
+        )
+    
+        res_var, global_match_sig = transform.get_match_sig(input_var)
+        bb_input_var,bb_header = transform.get_bb_header()
+    
+        match_dims = transform.get_match_dims(bb_input_var,dims)
+        
+        match_opname = transform.get_match_op_name(bb_input_var,self.source_op.name)
+
+        tmyield = transform.get_match_structured_terminator(bb_input_var)
+    
+        tyield = transform.get_terminator(result = res_var)
+    
+        lines = [
+            seq_sig,
+            "{",
+            global_match_sig,
+            "{",
+            bb_header,
+        ] + match_dims + [
+            match_opname,
+            tmyield,
+            "}",
+            tyield,
+            "}"
+        ]
+
+        return sym_name,"\n".join(lines)
+
+    def materialize_schedule(self):
+
+        sym_name,input_var,seq_sig = transform.get_seq_signature(
+            input_consumed = True,
+            has_output = False,
+        )
+
+        dims_vectors = {}
+
+        # Build the transform vectors corresponding to each tiling instruction
+        for tile_level in range(len(max(self.tiles.values(),key=len))):
+            for dim_to_tile,(k,v) in enumerate(self.tiles.items()):
+                if tile_level >= len(v):
+                    continue
+                dim_name = list(v.keys())[tile_level]
+                dims_vectors[dim_name] = [
+                    v[dim_name] if i == dim_to_tile else 0
+                    for i in range(len(self.tiles))
+                ]
+
+        # Reorder the vectors (according to the permutation)
+        dims_vectors = OrderedDict(
+            [(p,dims_vectors[p]) for p in self.permutation]
+        )
+
+        # Actually produce the tiling (and vectorization) instructions
+        loop_nest = OrderedDict({})
+        current_state = input_var
+        tiling_instrs = []
+        for dim,dims_vector in dims_vectors.items():
+            if dim in self.vectorization:
+                tiling_instrs.append(transform.get_vectorize(current_state))
+                break
+            new_state,new_loop,new_instr = transform.produce_tiling_instr(
+                current_state = current_state,
+                dims_vector = dims_vector,
+            )
+            tiling_instrs.append(new_instr)
+            loop_nest[dim] = new_loop
+            current_state = new_state
+
+        # Produce the unrolling instructions
+        unroll_instrs = [
+            transform.get_unroll(loop=loop_nest[dim],factor=factor)
+            for dim,factor in self.unrolling.items()
+        ]
+        
+        lines = [seq_sig,"{"] + tiling_instrs + unroll_instrs + [transform.get_terminator(),"}"]
+        return sym_name,"\n".join(lines)
+    
+    def glue(self):
+        # Fetch data
+        operands = self.source_op.operands
+        operands_types = [o.type for o in operands]
+        results_types = [r.type for r in self.source_op.results]
+        # External functions
+        ext_rtclock = func.FuncOp.external("rtclock", [], [f64])
+        ext_printF64 = func.FuncOp.external("printF64", [f64], [])
+        # Build the payload function
+        payload_func = self.payload()
+        # Build the main function
+        inputs = self.inputs_init()
+        rtclock_call1 = func.Call(ext_rtclock.sym_name.data, [], [f64])
+        payload_call = func.Call(payload_func.sym_name.data,inputs,results_types)
+        rtclock_call2 = func.Call(ext_rtclock.sym_name.data, [], [f64])
+        elapsed = arith.Subf(rtclock_call2,rtclock_call1)
+        print_elapsed = func.Call(ext_printF64.sym_name.data, [elapsed], [])
+        main = Block()
+        main.add_ops(inputs + [
+            rtclock_call1,
+            payload_call,
+            rtclock_call2,
+            elapsed,
+            print_elapsed,
+            func.Return(),
+        ])
+        main_func = func.FuncOp.from_region("main", [], [], Region(main))
+        # Glue the module
+        # mod = ModuleOp([ext_rtclock,ext_printF64,payload_func,main_func])
+        # str_mod = str(mod)
+        str_mod = "\n".join([str(tl) for tl in [
+            ext_rtclock,
+            ext_printF64,
+            payload_func,
+            main_func
+        ]])
+        match_sym_name,str_trans_match = self.uniquely_match()
+        
+        sched_sym_name,str_trans_sched = self.materialize_schedule()
+        
+        main_name,str_trans_main = transform.build_main(
+            [(match_sym_name,sched_sym_name)]
+        )
+        str_glued = (
+            "module attributes {transform.with_named_sequence} {"
+            + "\n"
+            + str_mod
+            + "\n"
+            + str_trans_sched
+            + "\n"
+            + str_trans_match
+            + "\n"
+            + str_trans_main
+            + "\n"
+            + "}"
+        )
+        
+        return str_glued
+
+    def evaluate(
+            self,
+            print_source_ir = False,
+            print_transformed_ir = False
+    ):
+
+        str_module = self.glue()
+
+        print_opts = []
+        zero_opt = mliropt_opts[0].replace('--','')
+        last_transform_opt = transform_opts[-1].replace('--','')
+        if print_source_ir:
+            print_opts.append(f"--mlir-print-ir-before={zero_opt}")
+        if print_transformed_ir:
+            print_opts.append(f"--mlir-print-ir-after={last_transform_opt}")
+
+        module_llvm = subprocess.run(
+            [self.mliropt] + mliropt_opts + print_opts,
+            input=str_module,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        result = subprocess.run(
+            self.cmd_run_mlir,
+            input=module_llvm.stdout,
+            stdout=subprocess.PIPE,
+            text=True
+        )
+        return module_llvm.stderr,result.stdout
+
+    def loops(self):
+        res = []
+        for k,v in self.tiles.items():
+            res += list(v.keys())
+        return res
+    
+    def get_default_interchange(self):
+        return self.loops()
+
+    def tile(
+            self,
+            dim: str,
+            tiles: OrderedDict[str,int],
+    ):
+        ndims = list(tiles.keys())
+        tiles_sizes = list(tiles.values())
+        
+        assert(len(ndims) == len(tiles_sizes))
+
+        previous_tile_size = self.dims[dim]
+        for ts in tiles_sizes:
+            assert(previous_tile_size%ts == 0)
+            previous_tile_size = ts
+        
+        dims = [dim] + ndims
+        sizes = tiles_sizes + [1]
+        for d,s in zip(dims,sizes):
+            self.tiles[dim][d] = s
+        self.permutation = self.get_default_interchange()
+            
+    def interchange(self, permutation: list[str]):
+        self.permutation = permutation
+
+    def vectorize(self, vectorization: list[str]):
+        self.vectorization = vectorization
+
+    def unroll(self, unrolling: OrderedDict[str,int]):
+        self.unrolling = unrolling
+        
+    # @abstractmethod
+    # def parallelize(self, dim: int):
+    #     pass
+
+
