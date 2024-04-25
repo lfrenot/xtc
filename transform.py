@@ -1,5 +1,4 @@
 import copy
-from collections import OrderedDict
 
 sym_count = 0
 var_count = 0

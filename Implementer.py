@@ -1,6 +1,5 @@
 from abc import ABC
 import subprocess
-from collections import OrderedDict
 
 from xdsl.parser import Parser
 from xdsl.tools.command_line_tool import get_all_dialects
@@ -47,7 +46,7 @@ class Implementer:
             self,
             mlir_install_dir: str,
             source_op: Operation,
-            dims: OrderedDict[str,int],
+            dims: dict[str,int],
             parallel_dims: list[str]
     ):
         #
@@ -68,7 +67,7 @@ class Implementer:
         self.permutation = self.get_default_interchange()
         self.vectorization = []
         self.parallelization = []
-        self.unrolling = OrderedDict([])
+        self.unrolling = dict([])
         #
         self.payload_name = f"payload{Implementer.count}"
         Implementer.count += 1
@@ -168,12 +167,12 @@ class Implementer:
                 ]
 
         # Reorder the vectors (according to the permutation)
-        dims_vectors = OrderedDict(
+        dims_vectors = dict(
             [(p,dims_vectors[p]) for p in self.permutation]
         )
 
         # Actually produce the tiling (and vectorization) instructions
-        loop_nest = OrderedDict({})
+        loop_nest = dict()
         current_state = input_var
         tiling_instrs = []
         for dim,dims_vector in dims_vectors.items():
@@ -290,7 +289,7 @@ class Implementer:
         return module_llvm.stderr,result.stdout
 
     def loops(self):
-        loops = OrderedDict([])
+        loops = dict()
         for tile_level in range(len(max(self.tiles.values(),key=len))):
             for (k,v) in self.tiles.items():
                 if tile_level >= len(v):
@@ -305,7 +304,7 @@ class Implementer:
     def tile(
             self,
             dim: str,
-            tiles: OrderedDict[str,int],
+            tiles: dict[str,int],
     ):
         ndims = list(tiles.keys())
         tiles_sizes = list(tiles.values())
@@ -334,7 +333,7 @@ class Implementer:
             assert(p in self.parallel_dims)
         self.parallelization = parallelization
 
-    def unroll(self, unrolling: OrderedDict[str,int]):
+    def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
         
     # @abstractmethod
