@@ -21,14 +21,17 @@ import transform
 transform_opt = "transform-interpreter"
 transform_opts = [
     f"--{transform_opt}",
+    "--func-bufferize",
+    "--buffer-deallocation",
     "--canonicalize",
-    "--test-transform-dialect-erase-schedule"
+    "--test-transform-dialect-erase-schedule",
 ]
 
 mliropt_opts = transform_opts + [
     # "--allow-unregistered-dialect",
     # "--mlir-print-op-generic",
-    "--func-bufferize",
+    # "--canonicalize",
+    # "--test-transform-dialect-erase-schedule",
     "--convert-linalg-to-loops",
     "--convert-scf-to-cf",
     "--canonicalize",
@@ -45,6 +48,7 @@ class Implementer:
             mlir_install_dir: str,
             source_op: Operation,
             dims: OrderedDict[str,int],
+            parallel_dims: list[str]
     ):
         #
         self.mliropt = f"{mlir_install_dir}/bin/mlir-opt"
@@ -57,14 +61,16 @@ class Implementer:
         ]
         #
         self.source_op = source_op
-        self.payload_name = f"payload{Implementer.count}"
-        Implementer.count += 1
         # TODO: should be computed
         self.dims = dims
+        self.parallel_dims = parallel_dims
         self.tiles = {k:{k:1} for k,v in self.dims.items()}
         self.permutation = self.get_default_interchange()
         self.vectorization = []
         self.unrolling = OrderedDict([])
+        #
+        self.payload_name = f"payload{Implementer.count}"
+        Implementer.count += 1
 
     def payload(self):
         # Fetch data
@@ -149,6 +155,12 @@ class Implementer:
                 if tile_level >= len(v):
                     continue
                 dim_name = list(v.keys())[tile_level]
+                # TODO depends on matmul
+                if dim_name in self.parallelization:
+                    vsize = len(self.dims) - (len(self.dims) - len(self.parallel_dims))
+                else:
+                    vsize = len(self.dims) 
+                #
                 dims_vectors[dim_name] = [
                     v[dim_name] if i == dim_to_tile else 0
                     for i in range(len(self.tiles))
@@ -170,7 +182,9 @@ class Implementer:
             new_state,new_loop,new_instr = transform.produce_tiling_instr(
                 current_state = current_state,
                 dims_vector = dims_vector,
+                parallel = dim in self.parallelization,
             )
+            
             tiling_instrs.append(new_instr)
             loop_nest[dim] = new_loop
             current_state = new_state
@@ -313,6 +327,11 @@ class Implementer:
 
     def vectorize(self, vectorization: list[str]):
         self.vectorization = vectorization
+
+    def parallelize(self, parallelization: list[str]):
+        for p in parallelization:
+            assert(p in self.parallel_dims)
+        self.parallelization = parallelization
 
     def unroll(self, unrolling: OrderedDict[str,int]):
         self.unrolling = unrolling

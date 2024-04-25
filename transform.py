@@ -102,6 +102,28 @@ def get_unroll(loop,factor):
     )
 
 def produce_tiling_instr(
+        current_state,
+        dims_vector,
+        parallel = False
+    ):
+
+    new_state = get_new_var()
+    new_loop = get_new_var()
+    
+    str_dims = "[" + ",".join([str(d) for d in dims_vector]) + "]"
+
+    opname = "tile_using_forall" if parallel else "tile_using_for"
+
+    attribute = "tile_sizes" if parallel else "" 
+    
+    str_tile = (
+        f"{new_state},{new_loop} = transform.structured.{opname}"
+        + f"{current_state} {attribute} {str_dims} :"
+        + "(!transform.any_op) -> (!transform.any_op, !transform.any_op)"
+    )
+    return new_state,new_loop,str_tile
+
+def produce_parallel_tiling_instr(
             current_state,
             dims_vector,
     ):
@@ -112,8 +134,8 @@ def produce_tiling_instr(
     str_dims = "[" + ",".join([str(d) for d in dims_vector]) + "]"
 
     str_tile = (
-        f"{new_state},{new_loop} = transform.structured.tile_using_for"
-        + f"{current_state} {str_dims} :"
+        f"{new_state},{new_loop} = transform.structured.tile_using_forall"
+        + f"{current_state} num_threads {str_dims} :"
         + "(!transform.any_op) -> (!transform.any_op, !transform.any_op)"
     )
     return new_state,new_loop,str_tile
