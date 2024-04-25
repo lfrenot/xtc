@@ -67,6 +67,7 @@ class Implementer:
         self.tiles = {k:{k:1} for k,v in self.dims.items()}
         self.permutation = self.get_default_interchange()
         self.vectorization = []
+        self.parallelization = []
         self.unrolling = OrderedDict([])
         #
         self.payload_name = f"payload{Implementer.count}"

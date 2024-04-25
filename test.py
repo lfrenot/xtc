@@ -32,7 +32,7 @@ impl.parallelize(['i'])
 impl.unroll(OrderedDict([('i1',8)]))
 stderr,stdout = impl.evaluate(
     print_source_ir=True,
-    print_transformed_ir=True,
+    print_transformed_ir=False,
 )
 print(stderr)
 print(stdout)
