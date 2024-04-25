@@ -25,12 +25,15 @@ impl = Implementer(
 impl.tile("i",OrderedDict([('i1',8)]))
 impl.tile("j",OrderedDict([('j1',4)]))
 impl.tile("k",OrderedDict([('k1',4)]))
-# impl.interchange(['i','j1','k1','i1','j','k'])
-# impl.vectorize(['k1'])
-# impl.unroll(OrderedDict([('i1',64)]))
+impl.interchange(['i','k','j','i1','k1','j1'])
+impl.vectorize(['k1'])
+impl.unroll(OrderedDict([('i1',64)]))
 stderr,stdout = impl.evaluate(
     print_source_ir=True,
-    print_transformed_ir=True
+    print_transformed_ir=False,
 )
 print(stderr)
 print(stdout)
+
+# print(impl.permutation)
+# print(impl.tiles)

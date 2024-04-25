@@ -19,12 +19,15 @@ from xdsl.dialects import func,arith,linalg
 import transform
 
 transform_opt = "transform-interpreter"
-transform_opts = [f"--{transform_opt}","--test-transform-dialect-erase-schedule"]
+transform_opts = [
+    f"--{transform_opt}",
+    "--canonicalize",
+    "--test-transform-dialect-erase-schedule"
+]
 
 mliropt_opts = transform_opts + [
     # "--allow-unregistered-dialect",
     # "--mlir-print-op-generic",
-    "--canonicalize",
     "--func-bufferize",
     "--convert-linalg-to-loops",
     "--convert-scf-to-cf",
@@ -50,7 +53,7 @@ class Implementer:
             "-e", "main",
             "--entry-point-result=void",
             f"-shared-libs={mlir_install_dir}/lib/libmlir_runner_utils.so",
-            f"-shared-libs={mlir_install_dir}/lib/libmlir_c_runner_utils.so"
+            f"-shared-libs={mlir_install_dir}/lib/libmlir_c_runner_utils.so"  
         ]
         #
         self.source_op = source_op
@@ -272,13 +275,17 @@ class Implementer:
         return module_llvm.stderr,result.stdout
 
     def loops(self):
-        res = []
-        for k,v in self.tiles.items():
-            res += list(v.keys())
-        return res
+        loops = OrderedDict([])
+        for tile_level in range(len(max(self.tiles.values(),key=len))):
+            for (k,v) in self.tiles.items():
+                if tile_level >= len(v):
+                    continue
+                dim_name = list(v.keys())[tile_level]
+                loops[dim_name] = v[dim_name]
+        return loops
     
     def get_default_interchange(self):
-        return self.loops()
+        return list(self.loops().keys())
 
     def tile(
             self,

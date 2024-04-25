@@ -135,6 +135,7 @@ def build_main(matchers_transformers):
     )
 
     branches = []
+    # current_state = input_var
     current_state = bufferized_var
     for (matcher,transformer) in matchers_transformers:
         new_state = get_new_var()
@@ -145,13 +146,33 @@ def build_main(matchers_transformers):
         branches.append(shot)
         current_state = new_state
 
+    hl_var = get_new_var()
+    hl_patterns = [
+        (
+            f"{hl_var} = transform.structured.match ops"
+            + "{[\"func.func\"]} "
+            + f"in {current_state} : (!transform.any_op) -> !transform.any_op"
+        ),
+        f"transform.apply_patterns to {hl_var}",
+        "{",
+        (
+            "transform.apply_patterns.vector.transfer_to_scf "
+            + "max_transfer_rank = 1 full_unroll = true"
+        ),
+        (
+            "transform.apply_patterns.vector.lower_multi_reduction "
+            + "lowering_strategy = \"innerreduction\""
+        ),
+        "} : !transform.any_op"
+    ]
+    
     tyield = "transform.yield"
         
     lines = [
         seq_sig,
         "{",
         bufferization,
-    ] + branches + [
+    ] + branches + hl_patterns + [
         tyield,
         "}"
     ]
