@@ -30,6 +30,7 @@ impl.tile("k",{'k1':16})
 impl.interchange(['i','k','j','i1','j1','k1'])
 impl.vectorize(['k1'])
 impl.parallelize(['i'])
+impl.unroll({'j1':4})
 impl.unroll({'i1':8})
 e = impl.evaluate(
     print_source_ir=False,
