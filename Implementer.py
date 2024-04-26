@@ -102,34 +102,50 @@ class Implementer:
     def payload(self):
         # Fetch data
         operands = self.source_op.operands
-        operands_types = [o.type for o in operands]
+        inputs = self.source_op.inputs
+        inputs_types = [o.type for o in inputs]
         results_types = [r.type for r in self.source_op.results]
         #
-        payload = Block(arg_types=operands_types)
+        payload = Block(arg_types=inputs_types)
+        outputs = self.outputs_init()
+        outputs_vars = []
+        for o in outputs:
+            outputs_vars += o.results
+        concrete_operands = list(payload.args) + outputs_vars
+        value_mapper = {o:p for o,p in zip(operands,concrete_operands)}
+        
         new_op = self.source_op.clone(
-            value_mapper = {o:p for o,p in zip(operands,payload.args)},
+            value_mapper = value_mapper
         )
-        payload.add_ops([new_op,func.Return(new_op)])
+        payload.add_ops(outputs + [new_op,func.Return(new_op)])
         payload_func = func.FuncOp.from_region(
             self.payload_name,
-            operands_types,
+            inputs_types,
             results_types,
             Region(payload)
         )
         return payload_func
 
     def inputs_init(self):
-        # Fetch data
-        operands = self.source_op.operands
-        operands_types = [o.type for o in operands]
-        #
+        inputs_types = [o.type for o in self.source_op.inputs]
         return [
             arith.Constant(DenseIntOrFPElementsAttr.tensor_from_list(
                 [1.0],
                 ty.get_element_type(),
                 ty.get_shape()
-            )) for ty in operands_types
-            ]
+            )) for ty in inputs_types
+        ]
+    
+
+    def outputs_init(self):
+        outputs_types = [o.type for o in self.source_op.outputs]
+        return [
+            arith.Constant(DenseIntOrFPElementsAttr.tensor_from_list(
+                [0.0],
+                ty.get_element_type(),
+                ty.get_shape()
+            )) for ty in outputs_types
+        ]
 
     def uniquely_match(self):
 
@@ -235,10 +251,16 @@ class Implementer:
         ext_printF64 = func.FuncOp.external("printF64", [f64], [])
         # Build the payload function
         payload_func = self.payload()
+        print(str(payload_func))
         # Build the main function
         inputs = self.inputs_init()
         rtclock_call1 = func.Call(ext_rtclock.sym_name.data, [], [f64])
-        payload_call = func.Call(payload_func.sym_name.data,inputs,results_types)
+        outputs = self.outputs_init()
+        payload_call = func.Call(
+            payload_func.sym_name.data,
+            inputs,
+            results_types
+        )
         rtclock_call2 = func.Call(ext_rtclock.sym_name.data, [], [f64])
         elapsed = arith.Subf(rtclock_call2,rtclock_call1)
         print_elapsed = func.Call(ext_printF64.sym_name.data, [elapsed], [])
