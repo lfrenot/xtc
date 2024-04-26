@@ -289,6 +289,7 @@ class Implementer:
             print_source_ir = False,
             print_transformed_ir = False,
             print_ir_after = [],
+            print_ir_before = [],
             print_assembly = False,
             color = False,
     ):
@@ -298,17 +299,19 @@ class Implementer:
         compile_extra_opts = []
         run_extra_opts = []
         disassemble_extra_opts = []
-        if color:
-            disassemble_extra_opts += objdump_color_opts
+        
+        
+            
         if print_source_ir:
             zero_opt = mliropt_opts[0].replace('--','')
             compile_extra_opts.append(f"--mlir-print-ir-before={zero_opt}")
         if print_transformed_ir:
             zero_lowering_opt = lowering_opts[0].replace('--','')
             compile_extra_opts.append(f"--mlir-print-ir-before={zero_lowering_opt}")
-        if print_ir_after:
-            for p in print_ir_after:
-                compile_extra_opts.append(f"--mlir-print-ir-after={p}")
+
+        compile_extra_opts += [f"--mlir-print-ir-after={p}" for p in print_ir_after]
+        compile_extra_opts += [f"--mlir-print-ir-before={p}" for p in print_ir_before]
+                
         if print_assembly:
             run_extra_opts += [
                 "--dump-object-file",
@@ -316,6 +319,9 @@ class Implementer:
             ]
             disassemble_extra_opts += [obj_dump_file]
 
+        if color:
+            disassemble_extra_opts += objdump_color_opts    
+            
         module_llvm = subprocess.run(
             [self.mliropt] + mliropt_opts + compile_extra_opts,
             input=str_module,

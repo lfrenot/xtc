@@ -35,6 +35,7 @@ e = impl.evaluate(
     print_source_ir=False,
     print_transformed_ir=False,
     # print_ir_after=['convert-vector-to-llvm'],
+    # print_ir_before=['test-transform-dialect-erase-schedule'],
     print_assembly=False,
     color = False,
 )
