@@ -251,7 +251,6 @@ class Implementer:
         ext_printF64 = func.FuncOp.external("printF64", [f64], [])
         # Build the payload function
         payload_func = self.payload()
-        print(str(payload_func))
         # Build the main function
         inputs = self.inputs_init()
         rtclock_call1 = func.Call(ext_rtclock.sym_name.data, [], [f64])

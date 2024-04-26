@@ -32,11 +32,11 @@ impl.vectorize(['k1'])
 impl.parallelize(['i'])
 impl.unroll({'j1':4,'i1':8})
 e = impl.evaluate(
-    print_source_ir=False,
-    print_transformed_ir=False,
+    print_source_ir=True,
+    # print_transformed_ir=False,
     # print_ir_after=['convert-vector-to-llvm'],
     # print_ir_before=['test-transform-dialect-erase-schedule'],
-    print_assembly=False,
-    color = False,
+    # print_assembly=False,
+    # color = False,
 )
 print(e)
