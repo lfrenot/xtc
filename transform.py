@@ -139,6 +139,14 @@ def produce_parallel_tiling_instr(
     )
     return new_state,new_loop,str_tile
 
+def apply_patterns(hl_var,patterns):
+    return [
+        f"transform.apply_patterns to {hl_var}",
+        "{",
+    ] + patterns + [
+        "} : !transform.any_op",
+    ]
+
 def build_main(matchers_transformers):
     sym_name = "@__transform_main"
 
@@ -156,7 +164,6 @@ def build_main(matchers_transformers):
     )
 
     branches = []
-    # current_state = input_var
     current_state = bufferized_var
     for (matcher,transformer) in matchers_transformers:
         new_state = get_new_var()
@@ -168,24 +175,26 @@ def build_main(matchers_transformers):
         current_state = new_state
 
     hl_var = get_new_var()
-    hl_patterns = [
-        (
+    match_func = (
             f"{hl_var} = transform.structured.match ops"
             + "{[\"func.func\"]} "
             + f"in {current_state} : (!transform.any_op) -> !transform.any_op"
-        ),
-        f"transform.apply_patterns to {hl_var}",
-        "{",
+    )
+    
+    hl_patterns0 = apply_patterns(hl_var, [
+        "transform.apply_patterns.vector.lower_masked_transfers",
+        "transform.apply_patterns.vector.transfer_permutation_patterns",
+        "transform.apply_patterns.vector.reduction_to_contract",
+    ])
+
+    hl_patterns1 = apply_patterns(hl_var, [
         (
-            "transform.apply_patterns.vector.transfer_to_scf "
-            + "max_transfer_rank = 1 full_unroll = true"
+            "transform.apply_patterns.vector.lower_contraction "
+            + "lowering_strategy = \"outerproduct\""
         ),
-        (
-            "transform.apply_patterns.vector.lower_multi_reduction "
-            + "lowering_strategy = \"innerreduction\""
-        ),
-        "} : !transform.any_op"
-    ]
+        "transform.apply_patterns.vector.lower_masks",
+        "transform.apply_patterns.vector.rank_reducing_subview_patterns",
+    ])
     
     tyield = "transform.yield"
         
@@ -193,7 +202,7 @@ def build_main(matchers_transformers):
         seq_sig,
         "{",
         bufferization,
-    ] + branches + hl_patterns + [
+    ] + branches + [match_func] + hl_patterns0 + hl_patterns1 + [
         tyield,
         "}"
     ]

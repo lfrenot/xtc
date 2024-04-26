@@ -21,21 +21,24 @@ transform_opt = "transform-interpreter"
 transform_opts = [
     f"--{transform_opt}",
     "--func-bufferize",
-    "--buffer-deallocation",
     "--canonicalize",
-    "--test-transform-dialect-erase-schedule",
+    "--buffer-deallocation",
 ]
 
-mliropt_opts = transform_opts + [
+lowering_opts = [
     # "--allow-unregistered-dialect",
     # "--mlir-print-op-generic",
     # "--canonicalize",
     # "--test-transform-dialect-erase-schedule",
+    "--test-transform-dialect-erase-schedule",
     "--convert-linalg-to-loops",
     "--convert-scf-to-cf",
     "--canonicalize",
+    "--convert-vector-to-llvm=enable-x86vector",
     "--test-lower-to-llvm",
 ]
+
+mliropt_opts = transform_opts +  lowering_opts
 
 obj_dump_file = "/tmp/dump.o"
 
@@ -300,8 +303,8 @@ class Implementer:
             zero_opt = mliropt_opts[0].replace('--','')
             compile_extra_opts.append(f"--mlir-print-ir-before={zero_opt}")
         if print_transformed_ir:
-            last_transform_opt = transform_opts[-1].replace('--','')
-            compile_extra_opts.append(f"--mlir-print-ir-after={last_transform_opt}")
+            zero_lowering_opt = lowering_opts[0].replace('--','')
+            compile_extra_opts.append(f"--mlir-print-ir-before={zero_lowering_opt}")
         if print_assembly:
             run_extra_opts += [
                 "--dump-object-file",
@@ -376,9 +379,5 @@ class Implementer:
 
     def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
-        
-    # @abstractmethod
-    # def parallelize(self, dim: int):
-    #     pass
 
 

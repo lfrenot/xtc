@@ -38,6 +38,3 @@ e = impl.evaluate(
     color = True,
 )
 print(e)
-
-# print(impl.permutation)
-# print(impl.tiles)
