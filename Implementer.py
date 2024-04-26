@@ -299,8 +299,6 @@ class Implementer:
         compile_extra_opts = []
         run_extra_opts = []
         disassemble_extra_opts = []
-        
-        
             
         if print_source_ir:
             zero_opt = mliropt_opts[0].replace('--','')

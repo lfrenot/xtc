@@ -30,14 +30,13 @@ impl.tile("k",{'k1':16})
 impl.interchange(['i','k','j','i1','j1','k1'])
 impl.vectorize(['k1'])
 impl.parallelize(['i'])
-impl.unroll({'j1':4})
-impl.unroll({'i1':8})
+impl.unroll({'j1':4,'i1':8})
 e = impl.evaluate(
     print_source_ir=False,
     print_transformed_ir=False,
     # print_ir_after=['convert-vector-to-llvm'],
     # print_ir_before=['test-transform-dialect-erase-schedule'],
-    print_assembly=True,
-    color = True,
+    print_assembly=False,
+    color = False,
 )
 print(e)
