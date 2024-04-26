@@ -27,7 +27,24 @@ make -j4
 make install
 ```
 
+## Install requirements
+
+```
+pip install -r requirements.txt
+```
+
+
 ## Use it
 
 + Example in test.py
 + Just works with matmul (for now)
+
+## Exploration
+
+Use exploration script, for instance random 100 points for a simple matmul tiling strategy (3D tiling):
+
+    ./explore.py --debug --search random --trials 100 --output results.random.csv
+
+Use exploration script, for instance on input data generated on some tvm search (3D tiling + permutations):
+
+    ./explore.py --debug --dims 256 256 512 --strategy tile4d --search data --data data/tvm_results.mm06.csv --output results.mm06.csv
