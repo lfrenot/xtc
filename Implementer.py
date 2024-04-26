@@ -288,6 +288,7 @@ class Implementer:
             self,
             print_source_ir = False,
             print_transformed_ir = False,
+            print_ir_after = [],
             print_assembly = False,
             color = False,
     ):
@@ -305,6 +306,9 @@ class Implementer:
         if print_transformed_ir:
             zero_lowering_opt = lowering_opts[0].replace('--','')
             compile_extra_opts.append(f"--mlir-print-ir-before={zero_lowering_opt}")
+        if print_ir_after:
+            for p in print_ir_after:
+                compile_extra_opts.append(f"--mlir-print-ir-after={p}")
         if print_assembly:
             run_extra_opts += [
                 "--dump-object-file",

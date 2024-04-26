@@ -195,6 +195,10 @@ def build_main(matchers_transformers):
         "transform.apply_patterns.vector.lower_masks",
         "transform.apply_patterns.vector.rank_reducing_subview_patterns",
     ])
+
+    hl_patterns2 = apply_patterns(hl_var, [
+        "transform.apply_patterns.vector.lower_transfer",
+    ])
     
     tyield = "transform.yield"
         
@@ -202,7 +206,7 @@ def build_main(matchers_transformers):
         seq_sig,
         "{",
         bufferization,
-    ] + branches + [match_func] + hl_patterns0 + hl_patterns1 + [
+    ] + branches + [match_func] + hl_patterns0 + hl_patterns1 + hl_patterns2 + [
         tyield,
         "}"
     ]

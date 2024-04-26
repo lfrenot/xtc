@@ -34,7 +34,8 @@ impl.unroll({'i1':8})
 e = impl.evaluate(
     print_source_ir=False,
     print_transformed_ir=False,
-    print_assembly=True,
-    color = True,
+    # print_ir_after=['convert-vector-to-llvm'],
+    print_assembly=False,
+    color = False,
 )
 print(e)
