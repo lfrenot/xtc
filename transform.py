@@ -89,8 +89,32 @@ def get_bb_header():
     bb_header = f"^bb0({bb_input_var}: !transform.any_op):"
     return bb_input_var, bb_header
 
+def get_vectorize_children(op):
+    vectorized = get_new_var()
+    vectorize = (
+        f"{vectorized} = transform.structured.vectorize_children_and_apply_patterns "
+        f"{op} : (!transform.any_op) -> !transform.any_op"
+    )
+    return vectorized,vectorize
+
 def get_vectorize(op):
     return f"transform.structured.vectorize {op} : !transform.any_op"
+
+def get_scalarize(op):
+    scalar = get_new_var()
+    scalarization = (
+        f"{scalar} = transform.structured.scalarize {op}"
+        + ": (!transform.any_op) -> !transform.any_op"
+    )
+    return scalar,scalarization
+
+def get_parent(op):
+    parent = get_new_var()
+    parenting = (
+        f"{parent} = transform.get_parent_op {op} "
+        + "{isolated_from_above} : (!transform.any_op) -> !transform.any_op"
+    )
+    return parent,parenting
 
 def get_unroll(loop,factor):
     return (
@@ -147,6 +171,40 @@ def apply_patterns(hl_var,patterns):
         "} : !transform.any_op",
     ]
 
+def tiling_apply_patterns(hl_var):
+    hl_patterns0 = apply_patterns(hl_var, [
+        'transform.apply_patterns.canonicalization',
+        'transform.apply_patterns.linalg.tiling_canonicalization',
+        'transform.apply_patterns.linalg.fold_unit_extent_dims_via_reshapes',
+    ])
+    return hl_patterns0
+
+def vector_apply_patterns(hl_var):
+    hl_patterns0 = apply_patterns(hl_var, [
+        "transform.apply_patterns.vector.lower_masked_transfers",
+        "transform.apply_patterns.vector.transfer_permutation_patterns",
+        "transform.apply_patterns.vector.reduction_to_contract",
+    ])
+
+    hl_patterns1 = apply_patterns(hl_var, [
+        (
+            "transform.apply_patterns.vector.lower_contraction "
+            + "lowering_strategy = \"outerproduct\""
+        ),
+        "transform.apply_patterns.vector.lower_masks",
+        "transform.apply_patterns.vector.rank_reducing_subview_patterns",
+    ])
+
+    hl_patterns2 = apply_patterns(hl_var, [
+        "transform.apply_patterns.vector.lower_transfer",
+    ])
+
+    hl_patterns3 = apply_patterns(hl_var, [
+        "transform.apply_patterns.canonicalization",
+    ])
+    
+    return hl_patterns0 + hl_patterns1 + hl_patterns2 + hl_patterns3
+
 def build_main(matchers_transformers):
     sym_name = "@__transform_main"
 
@@ -174,39 +232,39 @@ def build_main(matchers_transformers):
         branches.append(shot)
         current_state = new_state
 
-    hl_var = get_new_var()
-    match_func = (
-            f"{hl_var} = transform.structured.match ops"
-            + "{[\"func.func\"]} "
-            + f"in {current_state} : (!transform.any_op) -> !transform.any_op"
-    )
+    # hl_var = get_new_var()
+    # match_func = (
+    #         f"{hl_var} = transform.structured.match ops"
+    #         + "{[\"func.func\"]} "
+    #         + f"in {current_state} : (!transform.any_op) -> !transform.any_op"
+    # )
     
-    hl_patterns0 = apply_patterns(hl_var, [
-        "transform.apply_patterns.vector.lower_masked_transfers",
-        "transform.apply_patterns.vector.transfer_permutation_patterns",
-        "transform.apply_patterns.vector.reduction_to_contract",
-    ])
+    # hl_patterns0 = apply_patterns(hl_var, [
+    #     "transform.apply_patterns.vector.lower_masked_transfers",
+    #     "transform.apply_patterns.vector.transfer_permutation_patterns",
+    #     "transform.apply_patterns.vector.reduction_to_contract",
+    # ])
 
-    hl_patterns1 = apply_patterns(hl_var, [
-        (
-            "transform.apply_patterns.vector.lower_contraction "
-            + "lowering_strategy = \"outerproduct\""
-        ),
-        "transform.apply_patterns.vector.lower_masks",
-        "transform.apply_patterns.vector.rank_reducing_subview_patterns",
-    ])
+    # hl_patterns1 = apply_patterns(hl_var, [
+    #     (
+    #         "transform.apply_patterns.vector.lower_contraction "
+    #         + "lowering_strategy = \"outerproduct\""
+    #     ),
+    #     "transform.apply_patterns.vector.lower_masks",
+    #     "transform.apply_patterns.vector.rank_reducing_subview_patterns",
+    # ])
 
-    hl_patterns2 = apply_patterns(hl_var, [
-        "transform.apply_patterns.vector.lower_transfer",
-    ])
-    
+    # hl_patterns2 = apply_patterns(hl_var, [
+    #     "transform.apply_patterns.vector.lower_transfer",
+    # ])
+
     tyield = "transform.yield"
         
     lines = [
         seq_sig,
         "{",
         bufferization,
-    ] + branches + [match_func] + hl_patterns0 + hl_patterns1 + hl_patterns2 + [
+    ] + branches + [
         tyield,
         "}"
     ]
