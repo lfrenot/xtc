@@ -52,6 +52,8 @@ objdump_bin = 'objdump'
 
 objdump_opts = [
     '-d',
+    '--no-addresses',
+    '--no-show-raw-insn',
     '--visualize-jumps'
 ]
 
