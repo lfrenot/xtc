@@ -137,7 +137,16 @@ def tile_generator_4d(op_args):
     logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     return all_in_x
 
+def tile_generator_4dv(op_args):
+    i, j, k, dtype = op_args
+    all_in_x = tile_generator_4d(op_args)
+    # Keep only vectorized dims, i.e. x[-1] in [1, 4] and tile j >= 16
+    all_in_x = [x for x in all_in_x if (x[-1] in [1, 4] and x[1] >= 16)]
+    logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
+    return all_in_x
+
 def evaluate_one(scheduler, tile_strategy, op_args, in_x, args, callback=None):
+    assert isinstance(in_x, list)
     logger.debug(f"Evaluate: {in_x}...")
     impl, op = scheduler(*op_args)
     tile_strategy(impl, op_args, in_x)
@@ -146,12 +155,24 @@ def evaluate_one(scheduler, tile_strategy, op_args, in_x, args, callback=None):
         eval_args.update(dict(
             print_source_ir=True,
             print_transformed_ir=True,
+            print_assembly=True,
         ))
     stdout = impl.evaluate(**eval_args)
     logger.debug("STDOUT: %s", stdout)
-    time = float(stdout)
-    logger.debug(f"Schedule: {in_x}: time: {time*1000:.2f} msecs")
-    result = (in_x, time)
+    error = 0
+    try:
+        # TODO: for now we detect errors when trying to parse the result
+        time = float(stdout)
+    except ValueError:
+        time = 0
+        error = 1
+
+    if error == 0:
+        logger.debug(f"Schedule: {in_x}: time: {time*1000:.2f} msecs")
+    else:
+        logger.error(f"Error evaluating: {in_x}")
+
+    result = (in_x, error, time)
     if callback:
         callback(result)
     return result
@@ -167,7 +188,7 @@ def evaluate_exhaustive(scheduler, tile_strategy, tile_generator, op_args, args,
     logger.debug(f"Search space size: {size}")
     results = []
     for in_x in tqdm(all_in_x):
-        result = evaluate_one(scheduler, tile_strategy, op_args, in_x, args, callback)
+        result = evaluate_one(scheduler, tile_strategy, op_args, in_x.tolist(), args, callback)
         results.append(result)
     return results
 
@@ -176,7 +197,7 @@ def evaluate_data(scheduler, tile_strategy, X, op_args, args, callback=None):
     logger.debug(f"Search space size: {size}")
     results = []
     for in_x in tqdm(X):
-        result = evaluate_one(scheduler, tile_strategy, op_args, in_x, args, callback)
+        result = evaluate_one(scheduler, tile_strategy, op_args, in_x.tolist(), args, callback)
         results.append(result)
     return results
 
@@ -206,9 +227,14 @@ def search_some(scheduler, tile_strategy, tile_generator, op_args, args):
         writer.writerow(("X", "time", "peak"))
         outf.flush()
         def result_callback(result):
-            x, time = result
+            x, error, time = result
+            if error != 0:
+                logger.debug(f"Skip recording error for: {x}")
+                return
             peak = ptime/time
-            writer.writerow([x.tolist(), time, peak])
+            row = [x, time, peak]
+            logger.debug(f"Record row: {row}")
+            writer.writerow(row)
             outf.flush()
         if args.search in ["exhaustive", "random"]:
             results = evaluate_exhaustive(scheduler, tile_strategy, tile_generator,
@@ -228,7 +254,10 @@ def optimize(args):
     scheduler = OPERATORS[args.operator]["scheduler"]
     tile_strategy = STRATEGIES[args.strategy]["strategy"]
     if args.test:
-        evaluate_one(scheduler, tile_strategy, op_args, args.test, args)
+        ptime = peak_time(args)
+        in_x, error, time = evaluate_one(scheduler, tile_strategy, op_args, args.test, args)
+        if error == 0:
+            logger.info(f"Schedule: {in_x}: time: {time*1000:.2f} msecs, peak perf: {ptime/time*100:.2f}%")
     else:
         tile_generator = STRATEGIES[args.strategy]["generator"]
         search_some(scheduler, tile_strategy, tile_generator, op_args, args)
@@ -258,6 +287,10 @@ STRATEGIES = {
     "tile4d": {
         "strategy": tile_strategy_4d,
         "generator": tile_generator_4d,
+    },
+    "tile4dv": {
+        "strategy": tile_strategy_4d,
+        "generator": tile_generator_4dv,
     },
 }
 
