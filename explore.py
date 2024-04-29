@@ -208,7 +208,7 @@ def search_some(scheduler, tile_strategy, tile_generator, op_args, args):
         def result_callback(result):
             x, time = result
             peak = ptime/time
-            writer.writerow([x, time, peak])
+            writer.writerow([x.tolist(), time, peak])
             outf.flush()
         if args.search in ["exhaustive", "random"]:
             results = evaluate_exhaustive(scheduler, tile_strategy, tile_generator,
