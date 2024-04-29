@@ -30,22 +30,37 @@ from xdsl.dialects.builtin import TensorType,f32
 from xdsl.ir import Block
 
 import utils
-from Implementer import Implementer
+import Implementer as mlir_impl
+import TVMImplementer as tvm_impl
 
 logger = logging.getLogger(__name__)
 
-def matmul(i, j, k, dtype):
+def mlir_matmul(i, j, k, dtype):
     ttype = TYPES[dtype]
     operands_types = [TensorType(ttype, shape) for shape in [[i, k], [k, j], [i, j]]]
     op_block = Block(arg_types=operands_types)
     op_matmul = linalg.MatmulOp((op_block.args[0], op_block.args[1]), (op_block.args[2],))
     return op_matmul
 
-def matmul_sched(i, j, k, dtype):
-    op_matmul = matmul(i,j,k,dtype)
-    sched = Implementer(
+def mlir_matmul_sched(i, j, k, dtype):
+    op_matmul = mlir_matmul(i, j, k, dtype)
+    sched = mlir_impl.Implementer(
         mlir_install_dir=f"{HOME}/bin/llvm-xdsl",
         source_op=op_matmul,
+        dims=dict(i=i, j=j, k=k),
+        parallel_dims=["i", "j"],
+    )
+    return sched, op_matmul
+
+def tvm_matmul(i, j, k, dtype):
+    dtype_map = {"f32": "float32", "f64": "float64"}
+    operation = tvm_impl.Operation(tvm_impl.Operators.matmul, (256, 256, 512, dtype_map[dtype]))
+    return operation
+
+def tvm_matmul_sched(i, j, k, dtype):
+    op_matmul = tvm_matmul(i, j, k, dtype)
+    sched = tvm_impl.Implementer(
+        source_op = op_matmul,
         dims=dict(i=i, j=j, k=k),
         parallel_dims=["i", "j"],
     )
@@ -73,7 +88,8 @@ def tile_strategy_3d(impl, op_args, in_x):
     impl.tile("j", tiles_j_dict)
     impl.tile("k", tiles_k_dict)
     impl.interchange(axes_order)
-    impl.parallelize(parallel_axes)
+    if THREADS > 1:
+        impl.parallelize(parallel_axes)
     impl.vectorize(vector_axes)
     impl.unroll(unroll_axes)
 
@@ -116,7 +132,7 @@ def tile_strategy_4d(impl, op_args, in_x):
     impl.tile("j", {"j1": tj})
     impl.tile("k", {"k1": tk})
     impl.interchange(axes_order)
-    if parallel_axes is not None:
+    if parallel_axes is not None and THREADS > 1:
         impl.parallelize(parallel_axes)
     if vector_axes is not None:
         impl.vectorize(vector_axes)
@@ -187,7 +203,7 @@ def evaluate_exhaustive(scheduler, tile_strategy, tile_generator, op_args, args,
     size = len(all_in_x)
     logger.debug(f"Search space size: {size}")
     results = []
-    for in_x in tqdm(all_in_x):
+    for in_x in tqdm(all_in_x, smoothing=0):
         result = evaluate_one(scheduler, tile_strategy, op_args, in_x.tolist(), args, callback)
         results.append(result)
     return results
@@ -196,7 +212,7 @@ def evaluate_data(scheduler, tile_strategy, X, op_args, args, callback=None):
     size = len(X)
     logger.debug(f"Search space size: {size}")
     results = []
-    for in_x in tqdm(X):
+    for in_x in tqdm(X, smoothing=0):
         result = evaluate_one(scheduler, tile_strategy, op_args, in_x.tolist(), args, callback)
         results.append(result)
     return results
@@ -215,7 +231,7 @@ def read_input(fname, args):
 def peak_time(args):
     # assume AVX512 at 2.1GHhz single thread
     ops = utils.mulall(args.dims)
-    cycles = ops/2/16
+    cycles = ops/2/16/THREADS
     time = cycles/2.1e9
     return time
 
@@ -251,7 +267,7 @@ def optimize(args):
     dims = args.dims
     dtype = args.dtype
     op_args = (*dims, dtype)
-    scheduler = OPERATORS[args.operator]["scheduler"]
+    scheduler = OPERATORS[args.operator]["backends"][args.backend]["scheduler"]
     tile_strategy = STRATEGIES[args.strategy]["strategy"]
     if args.test:
         ptime = peak_time(args)
@@ -265,6 +281,8 @@ def optimize(args):
 
 HOME = os.environ.get("HOME", "")
 
+THREADS = None
+
 TYPES = {
     "f32": f32
 }
@@ -272,11 +290,19 @@ TYPES = {
 OPERATORS = {
     "matmul": {
         "dims": ["i", "j", "k"],
-        "operation": matmul,
-        "scheduler": matmul_sched,
         "default_dims": [512, 1024, 128],
         "default_type": "f32",
-    }
+        "backends": {
+            "mlir": {
+                "operation": mlir_matmul,
+                "scheduler": mlir_matmul_sched,
+            },
+            "tvm": {
+                "operation": tvm_matmul,
+                "scheduler": tvm_matmul_sched,
+                }
+        },
+    },
 }
 
 STRATEGIES = {
@@ -301,11 +327,13 @@ def main():
     parser.add_argument("--operator", type=str, choices=list(OPERATORS.keys()), default="matmul", help="operator to optimize")
     parser.add_argument("--strategy", type=str, choices=list(STRATEGIES.keys()), default="tile3d", help="tile strategy to use")
     parser.add_argument("--search", type=str, choices=["random", "exhaustive", "data"], default="random", help="search strategy")
+    parser.add_argument("--backend", type=str, choices=["mlir", "tvm"], default="mlir", help="backend to use")
     parser.add_argument("--data", type=str, help="data CSV file for input to data search")
     parser.add_argument("--dims", nargs="+", type=int, default=OPERATORS["matmul"]["default_dims"], help="dimensions")
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
     parser.add_argument("--dtype", type=str, choices=list(TYPES.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
+    parser.add_argument("--threads", type=int, default=1, help="number of threads")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--output", type=str, default="results.csv", help="output csv file for search")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
@@ -320,6 +348,13 @@ def main():
     if args.seed >= 0:
         np.random.seed(args.seed)
         random.seed(args.seed)
+
+    global THREADS
+    THREADS = args.threads
+
+    if args.backend == "tvm":
+        # Force number of threads for TVM
+        os.environ["TVM_NUM_THREADS"] = str(args.threads)
 
     optimize(args)
 
