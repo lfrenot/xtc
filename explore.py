@@ -25,8 +25,8 @@ import random
 import numpy as np
 from tqdm import tqdm
 
-from xdsl.dialects import func,linalg
-from xdsl.dialects.builtin import TensorType,f32
+from xdsl.dialects import func, linalg
+from xdsl.dialects.builtin import TensorType, f32, f64
 from xdsl.ir import Block
 
 import utils
@@ -36,8 +36,7 @@ import TVMImplementer as tvm_impl
 logger = logging.getLogger(__name__)
 
 def mlir_matmul(i, j, k, dtype):
-    ttype = TYPES[dtype]
-    operands_types = [TensorType(ttype, shape) for shape in [[i, k], [k, j], [i, j]]]
+    operands_types = [TensorType(MTYPES_MAP[dtype], shape) for shape in [[i, k], [k, j], [i, j]]]
     op_block = Block(arg_types=operands_types)
     op_matmul = linalg.MatmulOp((op_block.args[0], op_block.args[1]), (op_block.args[2],))
     return op_matmul
@@ -53,8 +52,7 @@ def mlir_matmul_sched(i, j, k, dtype):
     return sched, op_matmul
 
 def tvm_matmul(i, j, k, dtype):
-    dtype_map = {"f32": "float32", "f64": "float64"}
-    operation = tvm_impl.Operation(tvm_impl.Operators.matmul, (256, 256, 512, dtype_map[dtype]))
+    operation = tvm_impl.Operation(tvm_impl.Operators.matmul, (256, 256, 512, DTYPES_MAP[dtype]))
     return operation
 
 def tvm_matmul_sched(i, j, k, dtype):
@@ -229,11 +227,11 @@ def read_input(fname, args):
     return np.array(X)
 
 def peak_time(args):
-    # assume AVX512 at 2.1GHhz single thread
-    ops = utils.mulall(args.dims)
-    cycles = ops/2/16/THREADS
-    time = cycles/2.1e9
-    return time
+    return utils.cpu_peak_time(
+        utils.mulall(args.dims),
+        DTYPES_MAP[args.dtype],
+        args.threads
+    )
 
 def search_some(scheduler, tile_strategy, tile_generator, op_args, args):
     # Search depends on search strategy
@@ -283,8 +281,15 @@ HOME = os.environ.get("HOME", "")
 
 THREADS = None
 
-TYPES = {
-    "f32": f32
+MTYPES_MAP = {
+    "f32": f32,
+    "f64": f64,
+
+}
+
+DTYPES_MAP = {
+    "f32": "float32",
+    "f64": "float64",
 }
 
 OPERATORS = {
@@ -331,7 +336,7 @@ def main():
     parser.add_argument("--data", type=str, help="data CSV file for input to data search")
     parser.add_argument("--dims", nargs="+", type=int, default=OPERATORS["matmul"]["default_dims"], help="dimensions")
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
-    parser.add_argument("--dtype", type=str, choices=list(TYPES.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
+    parser.add_argument("--dtype", type=str, choices=list(MTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
     parser.add_argument("--seed", type=int, default=0, help="seed")
