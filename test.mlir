@@ -27,62 +27,38 @@ module attributes {transform.with_named_sequence} {
     %tiled_linalg_op_2, %loops_3 = transform.structured.tile_using_for %tiled_linalg_op_0[1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
     %tiled_linalg_op_4, %loops_5 = transform.structured.tile_using_for %tiled_linalg_op_2[0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
     %o0 = transform.get_parent_op %loops {isolated_from_above} : (!transform.any_op) -> !transform.any_op
+    
     transform.apply_patterns to %o0 {
       transform.apply_patterns.canonicalization
       transform.apply_patterns.linalg.tiling_canonicalization
       transform.apply_patterns.linalg.fold_unit_extent_dims_via_reshapes
-    } : !transform.any_op
+      // transform.apply_patterns.memref.expand_strided_metadata
+    } {apply_cse} : !transform.any_op
 
     %0 = transform.structured.vectorize_children_and_apply_patterns %o0
     : (!transform.any_op) -> !transform.any_op
-    // transform.structured.vectorize %tiled_linalg_op_4 : !transform.any_op
+
+    transform.apply_patterns to %0 {
+      transform.apply_patterns.vector.rank_reducing_subview_patterns
+      transform.apply_patterns.canonicalization
+    } {apply_cse} : !transform.any_op
 
     transform.apply_patterns to %0 {
       transform.apply_patterns.memref.fold_memref_alias_ops
-      transform.apply_patterns.canonicalization
-    } : !transform.any_op
-    transform.apply_cse to %0 : !transform.any_op
-
-    transform.apply_patterns to %0 {
       transform.apply_patterns.vector.lower_shape_cast
       transform.apply_patterns.vector.lower_outerproduct
       transform.apply_patterns.vector.lower_contraction lowering_strategy = "outerproduct"
+      transform.apply_patterns.vector.lower_broadcast
       transform.apply_patterns.canonicalization
-    } : !transform.any_op
-
-    // transform.apply_patterns to %0 {
-    //   transform.apply_patterns.vector.lower_outerproduct
-    // } : !transform.any_op
-
-    // transform.apply_patterns to %0 {
-    //   transform.apply_patterns.vector.lower_broadcast
-    // } : !transform.any_op
-
-    // transform.apply_patterns to %0 {
-    //   transform.apply_patterns.vector.lower_masked_transfers
-    //   transform.apply_patterns.vector.transfer_permutation_patterns
-    //   transform.apply_patterns.vector.reduction_to_contract
-    // } : !transform.any_op
-    // transform.apply_patterns to %0 {
-    //   transform.apply_patterns.vector.lower_contraction
-    //   transform.apply_patterns.vector.lower_masks
-    //   transform.apply_patterns.vector.rank_reducing_subview_patterns
-    // } : !transform.any_op
-    
-    // transform.apply_patterns to %0 {
-    //   transform.apply_patterns.canonicalization
-    // } : !transform.any_op
-
-    // Unroll ici
+    } {apply_cse} : !transform.any_op
 
     %1 = transform.structured.hoist_redundant_vector_transfers %0
       : (!transform.any_op) -> !transform.any_op
 
     transform.apply_patterns to %1 {
       transform.apply_patterns.vector.lower_transfer max_transfer_rank = 99
-      transform.apply_patterns.vector.transfer_permutation_patterns
       transform.apply_patterns.canonicalization
-    } : !transform.any_op
+    } {apply_cse} : !transform.any_op
 
     transform.yield 
   }
