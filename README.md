@@ -58,16 +58,31 @@ Use exploration script, for instance random 100 points for a simple matmul tilin
 
     ./explore.py --debug --search random --trials 100 --output results.random.csv
 
-Use exploration script, for instance on input data generated on some tvm search (3D tiling + permutations):
+Use exploration script, for instance on input data generated on some tvm search (3D tiling + permutations), 2054 points here:
 
-    ./explore.py --debug --dims 256 256 512 --strategy tile4d --search data --data data/tvm_results.mm06.csv --output results.mm06.csv
+    time -p ./explore.py --debug --dims 256 256 512 --strategy tile4d --search data --data data/tvm_results.mm06.csv --output data/results.mm06-tile4d.csv
+    ...
+    2054/2054 [55:54,  1.63s/it]
+    real 3356 secs
 
-Use exhaustive search on a tiling strategy limited to tile4d + only vectorized tilings:
+With TVM:
+
+    tile -p ./explore.py --debug --backend tvm --dims 256 256 512 --strategy tile4d --search data --data data/tvm_results.mm06.csv --output data/results.mm06-tile4d-tvm.csv
+    ...
+    2054/2054 [4:55,  8.65s/it]
+    real 17765 secs
+
+Use exhaustive search on a tiling strategy limited to tile4d + only vectorized tilings (450 points):
 
     # MLIR backend
-    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output results.mm06-tile4dv.csv
+    time -p ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output data/results.mm06-tile4dv.csv
+    ...
+    450/450 [06:47,  1.10it/s]
+    real 409 secs
     # TVM backend
-    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output results.mm06-tile4dv-tvm.csv
+    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend tvm --output data/results.mm06-tile4dv-tvm.csv
+    450/450 [15:59,  2.13s/it]
+    real 964.05
 
 Test a single tiling with mlir backend and tvm backend:
 
@@ -83,17 +98,17 @@ Test a single tiling with mlir backend and tvm backend:
 
 ## Display
 
-Result of exploration in `data/mlir_results.mm06.csv` on revision `2b0688cc` were generated with:
+Result of exploration and display in `data/mlir_results.mm06-tile4d-all.svg` were generated with:
 
-    ./explore.py --debug --dims 256 256 512 --strategy tile4d --search data --data data/tvm_results.mm06.csv --output data/mlir_results.mm06.csv
+    ./explore.py --debug --dims 256 256 512 --strategy tile4d --search exhaustive --backend mlir --output data/results.mm06-tile4d.csv
+    ./explore.py --debug --dims 256 256 512 --strategy tile4d --search exhaustive --backend tvm --output data/results.mm06-tile4d-tvm.csv
+    ./display-results.py --output data/results.mm06-tile4d-all.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 matmul" data/results.mm06-tile4d-tvm.csv:tvm:X:peak data/results.mm06-tile4d.csv:mlir:X:peak
 
-Comparative performance distribution in `data/results.mm06.svg` were generated with the display script:
+Comparative performance distribution on til24dv tilings for mlir and tvm backends in `data/mlir_results.mm06-tile4dv-all.svg` were generated with:
 
-    ./display-results.py --output data/results.mm06.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 matmul" data/tvm_results.mm06.csv:tvm data/mlir_results.mm06.csv:mlir:X:peak
-
-Comparative performance distribution on til24dv tilings for mlir and tvm backends:
-
-    ./display-results.py  --output data/results.mm06-tile4dv.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 vectorized matmul" data/results.mm06-tile4dv-tvm.csv:tvm:X:peak data/results.mm06-tile4dv.csv:mlir:X:peak
+    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output data/results.mm06-tile4dv.csv
+    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend tvm --output data/results.mm06-tile4dv-tvm.csv
+    ./display-results.py  --output data/results.mm06-tile4dv-all.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 vectorized matmul" data/results.mm06-tile4dv-tvm.csv:tvm:X:peak data/results.mm06-tile4dv.csv:mlir:X:peak
 
 ## Issues
 

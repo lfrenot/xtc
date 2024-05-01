@@ -76,7 +76,9 @@ def tile_strategy_3d(impl, op_args, in_x):
     tiles_k_dict = {f"k{i+1}": v for i, v in enumerate(tiles_k)}
     axes_order = ["i", "k", "j", "i1", "k1", "j1"]
     vector_axes = axes_order[-1:]
-    parallel_axes = axes_order[:1]
+    parallel_axes = None
+    if THREADS > 1:
+        parallel_axes = axes_order[:1]
     unroll_axes = {"k1": tiles_k[0], "i1": tiles_i[0]}
     logger.debug(
         "input: %s: tile i: %s, j: %s, k: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
@@ -86,7 +88,7 @@ def tile_strategy_3d(impl, op_args, in_x):
     impl.tile("j", tiles_j_dict)
     impl.tile("k", tiles_k_dict)
     impl.interchange(axes_order)
-    if THREADS > 1:
+    if parallel_axes is not None:
         impl.parallelize(parallel_axes)
     impl.vectorize(vector_axes)
     impl.unroll(unroll_axes)
@@ -119,9 +121,11 @@ def tile_strategy_4d(impl, op_args, in_x):
     tiles = {"i1": ti, "j1": tj, "k1": tk}
     axes_order = ["i", "j", "k"] + permutations
     vector_axes = [axes_order[-1]] if axes_order[-1] == "j1" else None
-    parallel_axes = [axes_order[0]] if axes_order[0] in ["i", "j"] else None
-    if parallel_axes is not None:
-        parallel_axes += [axes_order[1]] if axes_order[1] in ["i", "j"] else []
+    parallel_axes = None
+    if THREADS > 1:
+        parallel_axes = [axes_order[0]] if axes_order[0] in ["i", "j"] else None
+        if parallel_axes is not None:
+            parallel_axes += [axes_order[1]] if axes_order[1] in ["i", "j"] else []
     unroll_axes = {axis: tiles[axis] for axis in (permutations if vector_axes is None else permutations[:-1])[::-1]}
     logger.debug(
         "input: %s: tiles: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
@@ -130,7 +134,7 @@ def tile_strategy_4d(impl, op_args, in_x):
     impl.tile("j", {"j1": tj})
     impl.tile("k", {"k1": tk})
     impl.interchange(axes_order)
-    if parallel_axes is not None and THREADS > 1:
+    if parallel_axes is not None:
         impl.parallelize(parallel_axes)
     if vector_axes is not None:
         impl.vectorize(vector_axes)
