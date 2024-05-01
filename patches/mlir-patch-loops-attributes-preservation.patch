@@ -1,0 +1,13 @@
+diff --git a/mlir/lib/Dialect/SCF/IR/SCF.cpp b/mlir/lib/Dialect/SCF/IR/SCF.cpp
+index 3b55704c4ea0..b8322054595e 100644
+--- a/mlir/lib/Dialect/SCF/IR/SCF.cpp
++++ b/mlir/lib/Dialect/SCF/IR/SCF.cpp
+@@ -545,7 +545,7 @@ ForOp::replaceWithAdditionalYields(RewriterBase &rewriter,
+   scf::ForOp newLoop = rewriter.create<scf::ForOp>(
+       getLoc(), getLowerBound(), getUpperBound(), getStep(), inits,
+       [](OpBuilder &, Location, Value, ValueRange) {});
+-
++  newLoop.getOperation()->setAttrs(getOperation()->getAttrDictionary());
+   // Generate the new yield values and append them to the scf.yield operation.
+   auto yieldOp = cast<scf::YieldOp>(getBody()->getTerminator());
+   ArrayRef<BlockArgument> newIterArgs =
