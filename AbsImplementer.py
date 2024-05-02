@@ -21,13 +21,22 @@ transform_opts = [
 ]
 
 lowering_opts = [
-    "--func-bufferize",
-    # "--buffer-deallocation",
     "--test-transform-dialect-erase-schedule",
+    "--func-bufferize",
+    "--convert-vector-to-scf",
+    "--convert-linalg-to-loops",
+    "--lower-affine",
     "--convert-scf-to-cf",
     "--canonicalize",
-    "--convert-vector-to-llvm=enable-x86vector",
-    "--test-lower-to-llvm",
+    "--cse",
+    "--convert-vector-to-llvm",
+    "--convert-math-to-llvm",
+    "--expand-strided-metadata",
+    "--lower-affine",
+    "--finalize-memref-to-llvm",
+    "--convert-func-to-llvm",
+    "--convert-index-to-llvm",
+    "--reconcile-unrealized-casts",
 ]
 
 mliropt_opts = transform_opts +  lowering_opts
