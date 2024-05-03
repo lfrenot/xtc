@@ -97,6 +97,16 @@ def get_vectorize_children(op):
     )
     return vectorized,vectorize
 
+def get_registered_pass(op,reg):
+    nvar = get_new_var()
+    return nvar, (
+        nvar
+        +  " = transform.apply_registered_pass "
+        + "\"" + reg + "\" to "
+        + op
+        + ": (!transform.any_op) -> !transform.any_op"
+    )
+
 def get_vectorize(op):
     return f"transform.structured.vectorize {op} : !transform.any_op"
 
@@ -208,6 +218,16 @@ def vector_hoist(hl_var):
     )
     return nvar, hoist
 
+def vector_meta_hoist(op):
+    affined,get_affine = get_registered_pass(op,"lower-affine")
+    propagated,get_propagate = get_registered_pass(affined,"sccp")
+    moved,get_move = get_registered_pass(propagated,"loop-invariant-code-motion")
+    canonicalized = apply_patterns(moved,[
+        'transform.apply_patterns.canonicalization'
+    ])
+    hoisted,get_hoist = vector_hoist(moved)
+    return hoisted,[get_affine,get_propagate,get_move] + canonicalized + [get_hoist]
+
 def tiling_apply_patterns(hl_var):
     hl_patterns0 = apply_patterns(hl_var, [
         'transform.apply_patterns.canonicalization',
@@ -268,32 +288,6 @@ def build_main(matchers_transformers):
         )
         branches.append(shot)
         current_state = new_state
-
-    # hl_var = get_new_var()
-    # match_func = (
-    #         f"{hl_var} = transform.structured.match ops"
-    #         + "{[\"func.func\"]} "
-    #         + f"in {current_state} : (!transform.any_op) -> !transform.any_op"
-    # )
-    
-    # hl_patterns0 = apply_patterns(hl_var, [
-    #     "transform.apply_patterns.vector.lower_masked_transfers",
-    #     "transform.apply_patterns.vector.transfer_permutation_patterns",
-    #     "transform.apply_patterns.vector.reduction_to_contract",
-    # ])
-
-    # hl_patterns1 = apply_patterns(hl_var, [
-    #     (
-    #         "transform.apply_patterns.vector.lower_contraction "
-    #         + "lowering_strategy = \"outerproduct\""
-    #     ),
-    #     "transform.apply_patterns.vector.lower_masks",
-    #     "transform.apply_patterns.vector.rank_reducing_subview_patterns",
-    # ])
-
-    # hl_patterns2 = apply_patterns(hl_var, [
-    #     "transform.apply_patterns.vector.lower_transfer",
-    # ])
 
     tyield = "transform.yield"
         

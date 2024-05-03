@@ -80,18 +80,23 @@ class PerfectlyNestedImplementer(AbsImplementer):
         # Produce the vectorization instructions
         vectorized,vectorize = transform.get_vectorize_children(parent)
         apply_patterns0 = transform.vector_pre_hoist_apply_patterns(vectorized)
-        hoisted,hoist = transform.vector_hoist(vectorized)
-        lower_contract = transform.vector_lower_outerproduct_patterns(hoisted)
-        vect_instrs += [vectorize] + apply_patterns0 + [hoist] + lower_contract
+        # hoisted,hoist = transform.vector_hoist(vectorized)
+        # lower_contract = transform.vector_lower_outerproduct_patterns(hoisted)
+        # vect_instrs += [vectorize] + apply_patterns0 + [hoist] + lower_contract
+        lower_contract = transform.vector_lower_outerproduct_patterns(vectorized)
+        vect_instrs += [vectorize] + apply_patterns0 + lower_contract
 
         # Produce the unrolling instructions using the annotations on loops
         unroll_instrs = []
         for dim,factor in self.unrolling.items():
-            loop,match_loop = transform.match_by_attribute(hoisted,dim)
+            # loop,match_loop = transform.match_by_attribute(hoisted,dim)
+            loop,match_loop = transform.match_by_attribute(vectorized,dim)
             unroll = transform.get_unroll(loop,factor)
             unroll_instrs += [match_loop,unroll]
+
+        hoisted,get_hoist = transform.vector_meta_hoist(vectorized)
             
-        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + unroll_instrs + [transform.get_terminator(),"}"]
+        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + unroll_instrs + get_hoist + [transform.get_terminator(),"}"]
         return sym_name,"\n".join(lines)
 
     def loops(self):
