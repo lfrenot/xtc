@@ -4,8 +4,7 @@ from xdsl.dialects import func,linalg
 from xdsl.dialects.builtin import TensorType,f32
 from xdsl.ir import Block
 
-import Implementer
-from Implementer import Implementer
+from Implementer2 import Implementer
 
 home = os.environ.get("HOME","")
 
@@ -27,7 +26,7 @@ impl = Implementer(
 
 impl.tile("i",{'i1':8})
 impl.tile("j",{'j1':8})
-impl.tile("k",{'k1':8})
+impl.tile("k",{'k1':4})
 impl.interchange(['i','k','j','i1','j1','k1'])
 impl.vectorize(['k1'])
 impl.parallelize(['i'])

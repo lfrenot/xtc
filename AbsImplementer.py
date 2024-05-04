@@ -18,6 +18,9 @@ import transform
 transform_opt = "transform-interpreter"
 transform_opts = [
     f"--{transform_opt}",
+    "--canonicalize",
+    "--cse",
+    "--sccp",
 ]
 
 lowering_opts = [
@@ -104,9 +107,11 @@ class AbsImplementer(ABC):
     ):
                #
         self.payload_name = f"payload{AbsImplementer.count}"
+        self.init_payload_name = f"init_{self.payload_name}"
         AbsImplementer.count += 1
         #
-        self.cmd_mliropt = [f"{mlir_install_dir}/bin/mlir-opt"] + mliropt_opts
+        self.mliropt = [f"{mlir_install_dir}/bin/mlir-opt"]
+        self.cmd_mliropt = self.mliropt + mliropt_opts
         #
         self.cmd_run_mlir = [
             f"{mlir_install_dir}/bin/mlir-cpu-runner",
@@ -222,7 +227,6 @@ class AbsImplementer(ABC):
             print_assembly = False,
             color = True,
             dump_file = dump_file,
-            print_commands = False
     ):
         exe_dump_file = f"{dump_file}.out"
 
@@ -248,11 +252,16 @@ class AbsImplementer(ABC):
         if print_assembly:
             disassemble_process = self.disassemble(obj_file=dump_file,color=color)
 
-        if print_commands:
-            print("\n".join(self.cmds_history))
-            
         return result.stdout
 
+    def generate_without_compilation(
+            self,
+            color = True,
+    ):
+        str_module = self.glue()
+        mlir_process = self.execute_command(cmd=self.mliropt,input_pipe=str_module)
+        return str(mlir_process.stdout)
+    
     def compile(
             self,
             print_source_ir = False,
@@ -262,7 +271,6 @@ class AbsImplementer(ABC):
             print_assembly = False,
             color = True,
             dump_file = dump_file,
-            print_commands = False,
     ):
         
         ir_dump_file = f"{dump_file}.ir"
@@ -291,9 +299,6 @@ class AbsImplementer(ABC):
 
         if print_assembly:
             disassemble_process = self.disassemble(exe_file=exe_dump_file,color=color)
-
-        if print_commands:
-            print("\n".join(self.cmds_history))
     
     def glue(self):
         ctx = Context()
@@ -303,13 +308,15 @@ class AbsImplementer(ABC):
             ext_rtclock = build_rtclock(m)
             ext_printF64 = build_printF64(m)
             payload_func = self.payload(m,elt_type)
-            main_func = self.main(m,ext_rtclock,ext_printF64,payload_func,elt_type)
+            init_func = self.init_payload(m,elt_type)
+            main_func = self.main(m,ext_rtclock,ext_printF64,payload_func,init_func,elt_type)
         # Glue the module
         # mod = ModuleOp([ext_rtclock,ext_printF64,payload_func,main_func])
         # str_mod = str(mod)
         str_mod = "\n".join([str(tl) for tl in [
             ext_rtclock,
             ext_printF64,
+            init_func,
             payload_func,
             main_func,
         ]])
