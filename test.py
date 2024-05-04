@@ -28,6 +28,12 @@ e = impl.evaluate(
     # print_ir_after=['convert-vector-to-llvm',],
     # print_ir_before=['test-transform-dialect-erase-schedule'],
     print_assembly=True,
-    # color = True,
+    color = True,
+    print_commands = True,
 )
+# impl.compile(
+#     print_source_ir=False,
+#     print_assembly=True,
+#     print_commands=True
+# )
 # print(e)
