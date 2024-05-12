@@ -274,17 +274,15 @@ class AbsImplementer(ABC):
         bc_process = self.execute_command(cmd=llc_cmd)
 
         if print_assembly:
-            disassemble_process = self.disassemble(exe_file=exe_dump_file,color=color)
+            disassemble_process = self.disassemble(obj_file=exe_dump_file,color=color)
     
     def glue(self):
+        # Generate the payload
         ext_rtclock = self.build_rtclock()
         ext_printF64 = self.build_printF64()
         payload_func = self.payload()
         init_func = self.init_payload()
         main_func = self.main(ext_rtclock,ext_printF64,payload_func,init_func)
-        # Glue the module
-        # mod = ModuleOp([ext_rtclock,ext_printF64,payload_func,main_func])
-        # str_mod = str(mod)
         str_mod = "\n".join([str(tl) for tl in [
             ext_rtclock,
             ext_printF64,
@@ -292,13 +290,13 @@ class AbsImplementer(ABC):
             payload_func,
             main_func,
         ]])
+        # Generate the schedule
         match_sym_name,str_trans_match = self.uniquely_match()
-        
         sched_sym_name,str_trans_sched = self.materialize_schedule()
-        
         main_name,str_trans_main = transform.build_main(
             [(match_sym_name,sched_sym_name)]
         )
+        # Glue
         str_glued = (
             "module attributes {transform.with_named_sequence} {"
             + "\n"
@@ -312,7 +310,6 @@ class AbsImplementer(ABC):
             + "\n"
             + "}"
         )
-        
         return str_glued
     
     @abstractmethod

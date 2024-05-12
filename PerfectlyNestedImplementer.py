@@ -148,14 +148,14 @@ class PerfectlyNestedImplementer(AbsImplementer):
         self.permutation = permutation
 
     def vectorize(self, vectorization: list[str]):
-        for d in vectorization:
-            vector_size = self.tile_sizes_cache[d]
-            vector_index = self.permutation.index(d)
-            assert(vector_index > 0)
-            containing_dim = self.permutation[vector_index - 1]
-            for ad,cd in self.tiles.items():
-                if containing_dim in cd:
-                    cd[containing_dim] = vector_size
+        # for d in vectorization:
+        #     vector_size = self.tile_sizes_cache[d]
+        #     vector_index = self.permutation.index(d)
+        #     assert(vector_index > 0)
+        #     containing_dim = self.permutation[vector_index - 1]
+        #     for ad,cd in self.tiles.items():
+        #         if containing_dim in cd:
+        #             cd[containing_dim] = vector_size
         self.vectorization = vectorization
 
     def parallelize(self, parallelization: list[str]):
