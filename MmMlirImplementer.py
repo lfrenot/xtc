@@ -101,7 +101,7 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             f = func.FuncOp(
                 name=self.payload_name,
                 type=FunctionType.get(
-                    inputs=[self.A_tensor_type, self.B_tensor_type, self.C_tensor_type],
+                    inputs=[self.A_tensor_type, self.B_tensor_type],
                     results=[self.C_tensor_type]
                 ),
             )
@@ -109,7 +109,7 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
         with InsertionPoint(entry_block),self.loc as loc:
             A = f.entry_block.arguments[0]
             B = f.entry_block.arguments[1]
-            C_init = f.entry_block.arguments[2]
+            C_init = self.initialize_tensor(shape=(self.i,self.j),value=0.0)
             matmul = linalg.matmul(A, B, outs=[C_init])
             func.ReturnOp([matmul])
         return f
@@ -173,12 +173,10 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
         with InsertionPoint(fmain.add_entry_block()):
             #
             A = self.initialize_tensor(shape=(self.i,self.k),value=numpy.random.random())
-            #
             B = self.initialize_tensor(shape=(self.k,self.j),value=numpy.random.random())
             #
             callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
-            C_init = func.CallOp(init_payload, [],loc=self.loc)
-            C = func.CallOp(fmatmul, [A,B,C_init],loc=self.loc)
+            C = func.CallOp(fmatmul, [A,B],loc=self.loc)
             callrtclock2 = func.CallOp(frtclock,[],loc=self.loc)
             time = arith.SubFOp(callrtclock2,callrtclock1,loc=self.loc)
             func.CallOp(fprint,[time],loc=self.loc)
