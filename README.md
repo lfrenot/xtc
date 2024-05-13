@@ -15,6 +15,11 @@ pip install -e .
 
 ### Install the right version of MLIR
 
+Install dependencies (Debian):
+```
+sudo apt install pybind11-dev
+```
+
 Choose the commit for which xdsl is made (patches are in the directory
 xdsl-transform/patches):
 ```
