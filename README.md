@@ -47,7 +47,7 @@ make install
 
 Add the Python bindings to your PYTHONPATH:
 ```
-PYTHONPATH=$PYTHONPATH:$HOME/bin/llvm-xdsl/python_packages/mlir_core
+export PYTHONPATH=$PYTHONPATH:$HOME/bin/llvm-xdsl/python_packages/mlir_core
 ```
 
 ## Install requirements
