@@ -1,6 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
 import subprocess
+import sys
 
 import xdsl
 from xdsl.dialects.builtin import (
@@ -155,11 +156,12 @@ class AbsImplementer(ABC):
     def mlir_compile(
             self,
             code,
-            print_source_ir = False,
-            print_transformed_ir = False,
-            print_ir_after = [],
-            print_ir_before = [],
-            color = True,
+            print_source_ir,
+            print_transformed_ir,
+            print_ir_after,
+            print_ir_before,
+            color,
+            debug,
     ):
         compile_extra_opts = self.build_compile_extra_opts(
             print_source_ir = print_source_ir,
@@ -169,20 +171,34 @@ class AbsImplementer(ABC):
             color = color,
         )
         compile_cmd = self.cmd_mliropt + compile_extra_opts
-        module_llvm = self.execute_command(cmd=compile_cmd,input_pipe=code)
+        module_llvm = self.execute_command(
+            cmd=compile_cmd,
+            input_pipe=code,
+            debug = debug
+        )
         
         return str(module_llvm.stdout)
 
-    def disassemble(self,obj_file,color):
+    def disassemble(self,obj_file,color,debug):
         disassemble_extra_opts = self.build_disassemble_extra_opts(
             obj_file = obj_file,
             color = color
         )
         disassemble_cmd = self.cmd_disassembler + disassemble_extra_opts
-        bc_process = self.execute_command(cmd=disassemble_cmd,pipe_stdoutput=False)
+        bc_process = self.execute_command(
+            cmd=disassemble_cmd,
+            pipe_stdoutput=False,
+            debug = debug
+        )
         return bc_process
     
-    def execute_command(self, cmd, input_pipe=None, pipe_stdoutput=True):
+    def execute_command(
+            self,
+            cmd,
+            debug,
+            input_pipe=None,
+            pipe_stdoutput=True,
+    ):
         if input_pipe and pipe_stdoutput:
             result = subprocess.run(cmd,input=input_pipe,stdout=subprocess.PIPE,text=True)
         elif input_pipe and not pipe_stdoutput:
@@ -191,7 +207,13 @@ class AbsImplementer(ABC):
             result = subprocess.run(cmd,stdout=subprocess.PIPE,text=True)
         else:
             result = subprocess.run(cmd,text=True)
-        self.cmds_history.append(" ".join(cmd))
+
+        pretty_cmd = "| " if input_pipe else ""
+        pretty_cmd += " ".join(cmd)
+        self.cmds_history.append(pretty_cmd)
+        if debug:
+            print(f"> exec: {pretty_cmd}",file=sys.stderr)
+        
         return result
     
     def evaluate(
@@ -203,6 +225,7 @@ class AbsImplementer(ABC):
             print_assembly = False,
             color = True,
             dump_file = dump_file,
+            debug = False,
     ):
         exe_dump_file = f"{dump_file}.out"
 
@@ -214,7 +237,8 @@ class AbsImplementer(ABC):
             print_transformed_ir = print_transformed_ir,
             print_ir_after = print_ir_after,
             print_ir_before = print_ir_before,
-            color = color
+            color = color,
+            debug = debug,
         )
 
         run_extra_opts = self.build_run_extra_opts(
@@ -223,10 +247,18 @@ class AbsImplementer(ABC):
             color = color
         )
         cmd_run = self.cmd_run_mlir + run_extra_opts
-        result = self.execute_command(cmd=cmd_run,input_pipe=str_module_llvm)
+        result = self.execute_command(
+            cmd=cmd_run,
+            input_pipe=str_module_llvm,
+            debug = debug
+        )
 
         if print_assembly:
-            disassemble_process = self.disassemble(obj_file=dump_file,color=color)
+            disassemble_process = self.disassemble(
+                obj_file=dump_file,
+                color=color,
+                debug=debug,
+            )
 
         return result.stdout
 
@@ -247,6 +279,7 @@ class AbsImplementer(ABC):
             print_assembly = False,
             color = True,
             dump_file = dump_file,
+            debug = False,
     ):
         
         ir_dump_file = f"{dump_file}.ir"
@@ -262,19 +295,28 @@ class AbsImplementer(ABC):
             print_ir_after = print_ir_after,
             print_ir_before = print_ir_before,
             color = color,
+            debug = debug,
         )
 
         translate_cmd = self.cmd_mlirtranslate + ['-o', ir_dump_file]
-        llvmir_process = self.execute_command(cmd=translate_cmd,input_pipe=str_module_llvm)
+        llvmir_process = self.execute_command(
+            cmd=translate_cmd,
+            input_pipe=str_module_llvm,
+            debug = debug
+        )
 
         opt_cmd = self.cmd_opt + [ir_dump_file, '-o', bc_dump_file]
-        bc_process = self.execute_command(cmd=opt_cmd)
+        bc_process = self.execute_command(cmd=opt_cmd, debug=debug)
 
         llc_cmd = self.cmd_llc + [bc_dump_file, '-o', exe_dump_file]
-        bc_process = self.execute_command(cmd=llc_cmd)
+        bc_process = self.execute_command(cmd=llc_cmd, debug = debug)
 
         if print_assembly:
-            disassemble_process = self.disassemble(obj_file=exe_dump_file,color=color)
+            disassemble_process = self.disassemble(
+                obj_file=exe_dump_file,
+                color=color,
+                debug = debug
+            )
     
     def glue(self):
         # Generate the payload

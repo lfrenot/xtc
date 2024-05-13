@@ -45,9 +45,14 @@ class MmMlirSepInitImplementer(MmMlirImplementer):
             )
         with InsertionPoint(fmain.add_entry_block()):
             #
-            A = self.initialize_tensor(shape=(self.i,self.k),value=numpy.random.random())
-            #
-            B = self.initialize_tensor(shape=(self.k,self.j),value=numpy.random.random())
+            A = self.initialize_tensor(
+                shape=(self.i,self.k),
+                scalar_value=numpy.random.random()
+            )
+            B = self.initialize_tensor(
+                shape=(self.k,self.j),
+                scalar_value=numpy.random.random()
+            )
             #
             callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
             C_init = func.CallOp(init_payload, [],loc=self.loc)

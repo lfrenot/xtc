@@ -32,5 +32,6 @@ impl.compile(
     print_ir_before=[],
     print_assembly=True,
     color = True,
+    debug = False,
 )
 
