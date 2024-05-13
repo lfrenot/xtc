@@ -33,6 +33,7 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
         
         self.ctx = Context()
         self.elt_type = F32Type.get(context = self.ctx)
+        self.np_elt_type = numpy.float32
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp(loc = self.loc)
 
@@ -56,19 +57,35 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             loc = self.loc,
         )
 
-    def initialize_tensor(self,shape,value):
+    def initialize_tensor(self,shape,scalar_value):
         with self.loc as loc:
+            
             tensor_type = RankedTensorType.get(
                 shape = shape,
                 element_type = self.elt_type,
             )
-            elt = arith.ConstantOp(
-                value=FloatAttr.get(self.elt_type, value, loc = self.loc),
-                result=self.elt_type,
-            ).result
-            empty = tensor.EmptyOp(shape,self.elt_type)
+
+            # Strategy based on SplatOp
+            # elt = arith.ConstantOp(
+            #     value=FloatAttr.get(self.elt_type, value, loc = self.loc),
+            #     result=self.elt_type,
+            # ).result
             # return tensor.SplatOp(tensor_type,elt)
-            return linalg.fill(elt,outs=[empty])
+
+            # Strategy based on fill
+            # empty = tensor.EmptyOp(shape,self.elt_type)
+            # return linalg.fill(elt,outs=[empty])
+
+            # Strategy based on ConstantOp
+            numpy_value = numpy.full(
+                shape,
+                scalar_value,
+                dtype=self.np_elt_type,
+            )
+            value = DenseElementsAttr.get(
+                numpy_value,
+            )
+            return arith.ConstantOp(tensor_type, value)
         
     def build_rtclock(self):
         f64 = F64Type.get(context = self.ctx)
@@ -109,7 +126,10 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
         with InsertionPoint(entry_block),self.loc as loc:
             A = f.entry_block.arguments[0]
             B = f.entry_block.arguments[1]
-            C_init = self.initialize_tensor(shape=(self.i,self.j),value=0.0)
+            C_init = self.initialize_tensor(
+                shape=(self.i,self.j),
+                scalar_value=0.0
+            )
             matmul = linalg.matmul(A, B, outs=[C_init])
             func.ReturnOp([matmul])
         return f
@@ -172,8 +192,14 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             )
         with InsertionPoint(fmain.add_entry_block()):
             #
-            A = self.initialize_tensor(shape=(self.i,self.k),value=numpy.random.random())
-            B = self.initialize_tensor(shape=(self.k,self.j),value=numpy.random.random())
+            A = self.initialize_tensor(
+                shape=(self.i,self.k),
+                scalar_value=numpy.random.random()
+            )
+            B = self.initialize_tensor(
+                shape=(self.k,self.j),
+                scalar_value=numpy.random.random()
+            )
             #
             callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
             C = func.CallOp(fmatmul, [A,B],loc=self.loc)
