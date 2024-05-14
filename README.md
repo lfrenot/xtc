@@ -98,15 +98,20 @@ With TVM:
 
 Use exhaustive search on a tiling strategy limited to tile4d + only vectorized tilings (450 points):
 
-    # MLIR backend
-    time -p ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output data/results.mm06-tile4dv.csv
-    ...
-    450/450 [06:47,  1.10it/s]
-    real 409 secs
     # TVM backend
     ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend tvm --output data/results.mm06-tile4dv-tvm.csv
     450/450 [15:59,  2.13s/it]
     real 964.05
+
+    # XDSL backend
+    time -p ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend xdsl --output data/results.mm06-tile4dv-xdsl.csv
+    450/450 [25:07<00:00,  3.35s/it]
+    real 1509.73
+
+    # MLIR backend
+    time -p ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output data/results.mm06-tile4dv-mlir.csv
+    450/450 [11:57<00:00,  1.59s/it]
+    real 719.11
 
 Test a single tiling with mlir backend and tvm backend:
 
@@ -137,9 +142,7 @@ Result of exploration and display in `data/mlir_results.mm06-tile4d-all.svg` wer
 
 Comparative performance distribution on til24dv tilings for mlir and tvm backends in `data/mlir_results.mm06-tile4dv-all.svg` were generated with:
 
-    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend mlir --output data/results.mm06-tile4dv.csv
-    ./explore.py --debug --dims 256 256 512 --strategy tile4dv --search exhaustive --backend tvm --output data/results.mm06-tile4dv-tvm.csv
-    ./display-results.py  --output data/results.mm06-tile4dv-all.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 vectorized matmul" data/results.mm06-tile4dv-tvm.csv:tvm:X:peak data/results.mm06-tile4dv.csv:mlir:X:peak
+    ./display-results.py  --output data/results.mm06-tile4dv-all.svg --title "Exhaustive 1-level tiling + reorder (i,j,k, order) of 256x256x512 vectorized matmul" data/results.mm06-tile4dv-tvm.csv:tvm:X:peak data/results.mm06-tile4dv-xdsl.csv:xdsl:X:peak data/results.mm06-tile4dv-mlir.csv:mlir:X:peak
 
 ## Notes
 
