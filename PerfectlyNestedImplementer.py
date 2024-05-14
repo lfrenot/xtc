@@ -56,7 +56,8 @@ class PerfectlyNestedImplementer(AbsImplementer):
         loops = []
         for dim,dims_vector in dims_vectors.items():
             # Useless to materialize a loop which will be vectorized
-            if self.vectorization_backpropagation_possible(dim):
+            if dim in self.vectorization:
+            # if self.vectorization_backpropagation_possible(dim):
                 break
             # The actual tiling
             current_state,new_loop,new_instr = transform.produce_tiling_instr(
