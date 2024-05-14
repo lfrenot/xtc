@@ -56,7 +56,7 @@ class PerfectlyNestedImplementer(AbsImplementer):
         loops = []
         for dim,dims_vector in dims_vectors.items():
             # Useless to materialize a loop which will be vectorized
-            if dim in self.vectorization:
+            if self.vectorization_backpropagation_possible(dim):
                 break
             # The actual tiling
             current_state,new_loop,new_instr = transform.produce_tiling_instr(
@@ -165,7 +165,37 @@ class PerfectlyNestedImplementer(AbsImplementer):
 
     def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
+
+    # Si dim1 in unroll et pas d'axes de réduction
+    # entre dim1 et dim2 + petit de vectorization (ni dims non unrollées),
+    # alors break
+    def vectorization_backpropagation_possible(self,dim1):
+
+        if len(self.vectorization) == 0:
+            return False
+
+        dim2 = min(self.vectorization,key=lambda v: self.permutation.index(v))
+        idim1 = self.permutation.index(dim1)
+        idim2 = self.permutation.index(dim2)
+
+        if idim1 == idim2:
+            return True
+        elif idim1 > idim2:
+            return False
+
+        res = True
+        for d in self.permutation[idim1:idim2-1]:
+            if d in self.parallel_dims and d in self.vectorization:
+                pass
+            else:
+                res = False
+                break
+        
+        return res
     
+    def exclusive_interval_contains_reduction_axis(self,dim1,dim2):
+        pass
+        
     @abstractmethod
     def payload(self,m,elt_type):
         pass
