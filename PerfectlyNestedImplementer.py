@@ -89,17 +89,21 @@ class PerfectlyNestedImplementer(AbsImplementer):
         pre_hoist = transform.vector_pre_hoist_apply_patterns(vectorized)
         vect_instrs += pre_hoist
 
+        hoisted0,get_hoist0 = transform.vector_hoist(vectorized)
+        
         # Produce the unrolling instructions using the annotations on loops
         unroll_instrs = []
         for dim,factor in self.unrolling.items():
-            loop,match_loop = transform.match_by_attribute(vectorized,dim)
+            # loop,match_loop = transform.match_by_attribute(vectorized,dim)
+            loop,match_loop = transform.match_by_attribute(hoisted0,dim)
             unroll = transform.get_unroll(loop,factor)
             unroll_instrs += [match_loop,unroll]
 
-        hoisted,get_hoist = transform.vector_hoist(vectorized)
+        hoisted,get_hoist = transform.vector_hoist(hoisted0)
+        # hoisted,get_hoist = transform.vector_hoist(vectorized)
         get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
             
-        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + unroll_instrs + [get_hoist] + get_lower + [transform.get_terminator(),"}"]
+        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + [get_hoist0] + unroll_instrs + [get_hoist] + get_lower + [transform.get_terminator(),"}"]
         return sym_name,"\n".join(lines)
 
     def loops(self):
@@ -149,14 +153,6 @@ class PerfectlyNestedImplementer(AbsImplementer):
         self.permutation = permutation
 
     def vectorize(self, vectorization: list[str]):
-        # for d in vectorization:
-        #     vector_size = self.tile_sizes_cache[d]
-        #     vector_index = self.permutation.index(d)
-        #     assert(vector_index > 0)
-        #     containing_dim = self.permutation[vector_index - 1]
-        #     for ad,cd in self.tiles.items():
-        #         if containing_dim in cd:
-        #             cd[containing_dim] = vector_size
         self.vectorization = vectorization
 
     def parallelize(self, parallelization: list[str]):
@@ -167,9 +163,6 @@ class PerfectlyNestedImplementer(AbsImplementer):
     def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
 
-    # Si dim1 in unroll et pas d'axes de réduction
-    # entre dim1 et dim2 + petit de vectorization (ni dims non unrollées),
-    # alors break
     def vectorization_backpropagation_possible(self,dim1):
 
         if len(self.vectorization) == 0:

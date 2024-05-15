@@ -17,11 +17,11 @@ impl = MmMlirSepInitImplementer(
 
 impl.tile("i",{'i1':8})
 impl.tile("j",{'j1':8})
-impl.tile("k",{'k1':4})
-impl.interchange(['i','k','j','i1','j1','k1'])
-impl.vectorize(['k1'])
+impl.tile("k",{'k1':8})
+impl.interchange(['i','k','j','i1','k1','j1'])
+impl.vectorize(['j1'])
 impl.parallelize(['i'])
-impl.unroll({'j1':8,'i1':8})
+impl.unroll({'k1':8,'i1':8})
 
 e = impl.evaluate(
     print_source_ir=False,

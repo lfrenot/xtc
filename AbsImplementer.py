@@ -33,7 +33,7 @@ lowering_opts = [
     "--convert-scf-to-cf",
     "--canonicalize",
     "--cse",
-    "--convert-vector-to-llvm",
+    "--convert-vector-to-llvm=enable-x86vector",
     "--convert-math-to-llvm",
     "--expand-strided-metadata",
     "--lower-affine",
