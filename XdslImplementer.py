@@ -246,23 +246,3 @@ class XdslImplementer(PerfectlyNestedImplementer):
 
     def build_printF64(self):
         return func.FuncOp.external("printF64", [f64], [])
-
-    def init_payload(self):
-        #
-        results_types = [r.type for r in self.source_op.results]
-        #
-        init_payload = Block()
-        outputs = self.outputs_init()
-        outputs_vars = []
-        for o in outputs:
-            outputs_vars += o.results
-        ret = func.Return(*(o for o in outputs_vars))
-        init_payload.add_ops(outputs + [ret])
-        #
-        init_payload_func = func.FuncOp.from_region(
-            self.init_payload_name,
-            [],
-            results_types,
-            Region(init_payload)
-        )
-        return init_payload_func

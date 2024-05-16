@@ -10,7 +10,8 @@ from mlir.dialects import (
     func,
     linalg,
     tensor,
-    bufferization
+    bufferization,
+    memref
 )
 
 from PerfectlyNestedImplementer import PerfectlyNestedImplementer
@@ -167,18 +168,6 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
 
         return sym_name,"\n".join(lines)
 
-    def init_payload(self):
-        with InsertionPoint.at_block_begin(self.module.body):
-            init_func = func.FuncOp(
-                name=self.init_payload_name,
-                type=FunctionType.get(inputs=[], results=[self.C_tensor_type]),
-                loc = self.loc,
-            )
-        with InsertionPoint(init_func.add_entry_block()):
-            C = self.initialize_tensor((self.i,self.j),0.0)
-            func.ReturnOp([C],loc=self.loc)
-        return init_func
-    
     def main(self,frtclock,fprint,fmatmul):
         #
         with InsertionPoint.at_block_begin(self.module.body):
@@ -187,26 +176,31 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
                 type=FunctionType.get(inputs=[], results=[]),
                 loc=self.loc,
             )
-        with InsertionPoint(fmain.add_entry_block()):
+        with InsertionPoint(fmain.add_entry_block()), self.loc as loc:
             #
-            A = self.initialize_tensor(
-                shape=(self.i,self.k),
-                scalar_value=numpy.random.random()
-            )
-            B = self.initialize_tensor(
-                shape=(self.k,self.j),
-                scalar_value=numpy.random.random()
-            )
+            Ai = arith.ConstantOp(self.elt_type,numpy.random.random())
+            A = memref.AllocOp(self.A_memref_type, [], [])
+            linalg.fill(Ai,outs=[A])
+            #
+            Bi = arith.ConstantOp(self.elt_type,numpy.random.random())
+            B = memref.AllocOp(self.B_memref_type, [], [])
+            linalg.fill(Bi,outs=[B])
+            #
+            Ci = arith.ConstantOp(self.elt_type,0.0)
+            C = memref.AllocOp(self.C_memref_type, [], [])
             #
             callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
-            C = self.initialize_tensor(
-                shape=(self.i,self.j),
-                scalar_value=0.0
-            )
+            linalg.fill(Ci,outs=[C])
             func.CallOp(fmatmul, [A,B,C],loc=self.loc)
             callrtclock2 = func.CallOp(frtclock,[],loc=self.loc)
+            
             time = arith.SubFOp(callrtclock2,callrtclock1,loc=self.loc)
             func.CallOp(fprint,[time],loc=self.loc)
+
+            memref.DeallocOp(A)
+            memref.DeallocOp(B)
+            memref.DeallocOp(C)
+            
             func.ReturnOp([],loc=self.loc)
         
         return fmain
