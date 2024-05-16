@@ -47,9 +47,21 @@ mliropt_opts = transform_opts +  lowering_opts
 
 mlirtranslate_opts = ['--mlir-to-llvmir']
 
-llc_opts = ['-O3','-filetype=obj','--march=native']
+llc_opts = [
+    '-O3',
+    '-filetype=obj',
+    # '--march=native'
+]
 
-opt_opts = ['-O3','--march=native']
+opt_opts = [
+    '-O3',
+    '--march=native'
+]
+
+clang_opts = [
+    '-O3',
+    '-march=native'
+]
 
 dump_file = "/tmp/dump"
 
@@ -81,9 +93,10 @@ class AbsImplementer(ABC):
     def __init__(
             self,
             mlir_install_dir: str,
+            payload_name = None
     ):
-               #
-        self.payload_name = f"payload{AbsImplementer.count}"
+        
+        self.payload_name = payload_name if payload_name else f"payload{AbsImplementer.count}"
         self.init_payload_name = f"init_{self.payload_name}"
         AbsImplementer.count += 1
         #
@@ -101,6 +114,8 @@ class AbsImplementer(ABC):
         self.cmd_llc = [f"{mlir_install_dir}/bin/llc"] + llc_opts
         #
         self.cmd_opt = [f"{mlir_install_dir}/bin/opt"] + opt_opts
+        #
+        self.cmd_clang = [f"{mlir_install_dir}/bin/clang"] + clang_opts
         #
         self.cmd_disassembler = (
             [objdump_bin]
@@ -286,11 +301,11 @@ class AbsImplementer(ABC):
         ir_dump_file = f"{dump_file}.ir"
         bc_dump_file = f"{dump_file}.bc"
         exe_dump_file = f"{dump_file}.o"
-        
-        str_module = self.glue()
+
+        source_ir = self.glue()
             
         str_module_llvm = self.mlir_compile(
-            code = str_module,
+            code = source_ir,
             print_source_ir = print_source_ir,
             print_transformed_ir = print_transformed_ir,
             print_ir_after = print_ir_after,
@@ -311,6 +326,9 @@ class AbsImplementer(ABC):
 
         llc_cmd = self.cmd_llc + [bc_dump_file, '-o', exe_dump_file]
         bc_process = self.execute_command(cmd=llc_cmd, debug = debug)
+
+        # clang_cmd = self.cmd_clang + ['-c', ir_dump_file, '-o', exe_dump_file]
+        # bc_process = self.execute_command(cmd=clang_cmd, debug = debug)
 
         if print_assembly:
             disassemble_process = self.disassemble(
