@@ -215,7 +215,7 @@ class XdslImplementer(PerfectlyNestedImplementer):
         lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + unroll_instrs + [transform.get_terminator(),"}"]
         return sym_name,"\n".join(lines)
 
-    def main(self,ext_rtclock,ext_printF64,payload_func,init_payload):
+    def main(self,ext_rtclock,ext_printF64,payload_func):
         results_types = [r.type for r in self.source_op.results]
         #
         inputs = self.inputs_init()

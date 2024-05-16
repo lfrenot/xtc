@@ -9,7 +9,8 @@ from mlir.dialects import (
     builtin,
     func,
     linalg,
-    tensor
+    tensor,
+    bufferization
 )
 
 from PerfectlyNestedImplementer import PerfectlyNestedImplementer
@@ -41,17 +42,17 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
         self.j = self.dims[self.parallel_dims[1]]
         self.k = self.dims[self.reduction_dims[0]]
         
-        self.A_tensor_type = RankedTensorType.get(
+        self.A_memref_type = MemRefType.get(
             shape = (self.i,self.k),
             element_type = self.elt_type,
             loc = self.loc,
         )
-        self.B_tensor_type = RankedTensorType.get(
+        self.B_memref_type = MemRefType.get(
             shape = (self.k,self.j),
             element_type = self.elt_type,
             loc = self.loc,
         )
-        self.C_tensor_type = RankedTensorType.get(
+        self.C_memref_type = MemRefType.get(
             shape = (self.i,self.j),
             element_type = self.elt_type,
             loc = self.loc,
@@ -65,18 +66,11 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
                 element_type = self.elt_type,
             )
 
-            # Strategy based on SplatOp
-            # elt = arith.ConstantOp(
-            #     value=FloatAttr.get(self.elt_type, value, loc = self.loc),
-            #     result=self.elt_type,
-            # ).result
-            # return tensor.SplatOp(tensor_type,elt)
+            memref_type = MemRefType.get(
+                shape = shape,
+                element_type = self.elt_type,
+            )
 
-            # Strategy based on fill
-            # empty = tensor.EmptyOp(shape,self.elt_type)
-            # return linalg.fill(elt,outs=[empty])
-
-            # Strategy based on ConstantOp
             numpy_value = numpy.full(
                 shape,
                 scalar_value,
@@ -85,7 +79,9 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             value = DenseElementsAttr.get(
                 numpy_value,
             )
-            return arith.ConstantOp(tensor_type, value)
+            cons = arith.ConstantOp(tensor_type, value)
+            buff = bufferization.to_memref(tensor=cons,memref=memref_type)
+            return buff
         
     def build_rtclock(self):
         f64 = F64Type.get(context = self.ctx)
@@ -118,20 +114,21 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             f = func.FuncOp(
                 name=self.payload_name,
                 type=FunctionType.get(
-                    inputs=[self.A_tensor_type, self.B_tensor_type],
-                    results=[self.C_tensor_type]
+                    inputs=[
+                        self.A_memref_type,
+                        self.B_memref_type,
+                        self.C_memref_type
+                    ],
+                    results=[]
                 ),
             )
             entry_block = f.add_entry_block()
         with InsertionPoint(entry_block),self.loc as loc:
             A = f.entry_block.arguments[0]
             B = f.entry_block.arguments[1]
-            C_init = self.initialize_tensor(
-                shape=(self.i,self.j),
-                scalar_value=0.0
-            )
-            matmul = linalg.matmul(A, B, outs=[C_init])
-            func.ReturnOp([matmul])
+            C = f.entry_block.arguments[2]
+            matmul = linalg.matmul(A, B, outs=[C])
+            func.ReturnOp([])
         return f
         
     def uniquely_match(self):
@@ -182,7 +179,7 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             func.ReturnOp([C],loc=self.loc)
         return init_func
     
-    def main(self,frtclock,fprint,fmatmul,init_payload):
+    def main(self,frtclock,fprint,fmatmul):
         #
         with InsertionPoint.at_block_begin(self.module.body):
             fmain = func.FuncOp(
@@ -202,7 +199,11 @@ class MmMlirImplementer(PerfectlyNestedImplementer):
             )
             #
             callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
-            C = func.CallOp(fmatmul, [A,B],loc=self.loc)
+            C = self.initialize_tensor(
+                shape=(self.i,self.j),
+                scalar_value=0.0
+            )
+            func.CallOp(fmatmul, [A,B,C],loc=self.loc)
             callrtclock2 = func.CallOp(frtclock,[],loc=self.loc)
             time = arith.SubFOp(callrtclock2,callrtclock1,loc=self.loc)
             func.CallOp(fprint,[time],loc=self.loc)
