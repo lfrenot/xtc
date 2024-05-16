@@ -28,7 +28,7 @@ e = impl.evaluate(
     print_transformed_ir=False,
     print_ir_after=[],
     print_ir_before=[],
-    print_assembly=False,
+    print_assembly=True,
     color = True,
     debug = False,
 )

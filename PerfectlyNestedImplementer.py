@@ -172,30 +172,6 @@ class PerfectlyNestedImplementer(AbsImplementer):
     def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
 
-    def vectorization_backpropagation_possible(self,dim1):
-
-        if len(self.vectorization) == 0:
-            return False
-
-        dim2 = min(self.vectorization,key=lambda v: self.permutation.index(v))
-        idim1 = self.permutation.index(dim1)
-        idim2 = self.permutation.index(dim2)
-
-        if idim1 == idim2:
-            return True
-        elif idim1 > idim2:
-            return False
-
-        res = True
-        for d in self.permutation[idim1:idim2-1]:
-            if d in self.parallel_dims and d in self.vectorization:
-                pass
-            else:
-                res = False
-                break
-        
-        return res
-    
     def exclusive_interval_contains_reduction_axis(self,dim1,dim2):
         pass
         
