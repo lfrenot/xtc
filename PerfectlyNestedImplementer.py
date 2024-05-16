@@ -103,7 +103,16 @@ class PerfectlyNestedImplementer(AbsImplementer):
         # hoisted,get_hoist = transform.vector_hoist(vectorized)
         get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
             
-        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + [get_hoist0] + unroll_instrs + [get_hoist] + get_lower + [transform.get_terminator(),"}"]
+        lines = (
+            [seq_sig,"{"]
+            + tiling_instrs
+            + vect_instrs
+            + [get_hoist0]
+            + unroll_instrs
+            + [get_hoist]
+            + get_lower
+            + [transform.get_terminator(),"}"]
+        )
         return sym_name,"\n".join(lines)
 
     def loops(self):
