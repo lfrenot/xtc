@@ -148,11 +148,19 @@ def produce_tiling_instr(
     opname = "tile_using_forall" if parallel else "tile_using_for"
 
     attribute = "tile_sizes" if parallel else "" 
+
+    return_type = "(!transform.any_op"
+    num_loops = 0
+    for d in dims_vector:
+        if d > 0:
+            return_type += ",!transform.any_op"
+            num_loops +=1
+    return_type += ")"
     
     str_tile = (
-        f"{new_state},{new_loop} = transform.structured.{opname}"
+        f"{new_state},{new_loop}:{num_loops} = transform.structured.{opname}"
         + f"{current_state} {attribute} {str_dims} :"
-        + "(!transform.any_op) -> (!transform.any_op, !transform.any_op)"
+        + f"(!transform.any_op) -> {return_type}"
     )
     return new_state,new_loop,str_tile
 
@@ -167,6 +175,14 @@ def match_by_attribute(op,attr):
     return nvar, (
         nvar + " = transform.structured.match "
         + "attributes{\"" + attr + "\"} in " + op
+        + ": (!transform.any_op) -> !transform.any_op"
+    )
+
+def match_by_op_name(op,name):
+    nvar = get_new_var()
+    return nvar, (
+        nvar + " = transform.structured.match "
+        + "ops{[\"" + name + "\"]} in " + op
         + ": (!transform.any_op) -> !transform.any_op"
     )
 
@@ -289,6 +305,10 @@ def build_main(matchers_transformers):
         branches.append(shot)
         current_state = new_state
 
+    fills,match_fills = match_by_op_name(current_state,"linalg.fill")
+    fills_tiled,tile_loop,tile_fills = produce_tiling_instr(fills,[1,16])
+    vectorize_fills = get_vectorize(fills_tiled)
+        
     tyield = "transform.yield"
         
     lines = [
@@ -296,6 +316,9 @@ def build_main(matchers_transformers):
         "{",
         bufferization,
     ] + branches + [
+        match_fills,
+        tile_fills,
+        vectorize_fills,
         tyield,
         "}"
     ]
