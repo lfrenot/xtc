@@ -23,41 +23,19 @@ class XdslImplementer(PerfectlyNestedImplementer):
     def __init__(
             self,
             mlir_install_dir: str,
+            source_op: Operation,
             dims: dict[str,int],
             parallel_dims: list[str],
             reduction_dims: list[str],
-            named_op_name: str,
-            element_type: str,
     ):
         #
-
         super().__init__(
             mlir_install_dir,
+            source_op,
             dims,
             parallel_dims,
             reduction_dims
         )
-
-        if element_type == "f64":
-            elt_type = f64
-        elif element_type == "f32":
-            elt_type = f32
-        else:
-            assert(False)
-
-        if named_op_name == "matmul":
-            i = self.dims[self.parallel_dims[0]]
-            j = self.dims[self.parallel_dims[1]]
-            k = self.dims[self.reduction_dims[0]]
-            operands_types = [TensorType(elt_type,shape) for shape in [[i,k],[k,j],[i,j]]]
-            block0 = Block(arg_types=operands_types)
-            matmul = linalg.MatmulOp(
-                (block0.args[0],block0.args[1]),
-                (block0.args[2],)
-            )
-            self.source_op = matmul
-        else:
-            assert(False)
 
     def payload(self):
         # Fetch data
@@ -106,114 +84,6 @@ class XdslImplementer(PerfectlyNestedImplementer):
                 ty.get_shape()
             )) for ty in outputs_types
         ]
-
-    def uniquely_match(self):
-
-        dims = self.dims.values()
-        
-        sym_name,input_var,seq_sig = transform.get_seq_signature(
-            input_consumed = False,
-            has_output = True,
-        )
-    
-        res_var, global_match_sig = transform.get_match_sig(input_var)
-        bb_input_var,bb_header = transform.get_bb_header()
-    
-        match_dims = transform.get_match_dims(bb_input_var,dims)
-        
-        match_opname = transform.get_match_op_name(bb_input_var,self.source_op.name)
-
-        tmyield = transform.get_match_structured_terminator(bb_input_var)
-    
-        tyield = transform.get_terminator(result = res_var)
-    
-        lines = [
-            seq_sig,
-            "{",
-            global_match_sig,
-            "{",
-            bb_header,
-        ] + match_dims + [
-            match_opname,
-            tmyield,
-            "}",
-            tyield,
-            "}"
-        ]
-
-        return sym_name,"\n".join(lines)
-
-    def materialize_schedule_deprecated(self):
-
-        sym_name,input_var,seq_sig = transform.get_seq_signature(
-            input_consumed = True,
-            has_output = False,
-        )
-
-        # Build the transform vectors corresponding to each tiling instruction
-        dims_vectors = {}
-        for tile_level in range(len(max(self.tiles.values(),key=len))):
-            for dim_to_tile,(k,v) in enumerate(self.tiles.items()):
-                if tile_level >= len(v):
-                    continue
-                #
-                dim_name = list(v.keys())[tile_level]
-                dims_vectors[dim_name] = [
-                    v[dim_name] if i == dim_to_tile else 0
-                    for i in range(len(self.tiles))
-                ]
-
-        # Reorder the vectors (according to the permutation)
-        dims_vectors = dict([(p,dims_vectors[p]) for p in self.permutation])
-
-        # Actually produce the tiling instructions and annotate the resulting
-        # loops
-        current_state = input_var
-        tiling_instrs = []
-        vect_instrs = []
-        for dim,dims_vector in dims_vectors.items():
-            # Useless to materialize a loop which will be vectorized
-            if dim in self.vectorization:
-                continue
-            # The actual tiling
-            current_state,new_loop,new_instr = transform.produce_tiling_instr(
-                current_state = current_state,
-                dims_vector = dims_vector,
-                parallel = dim in self.parallelization,
-            )
-            # Name the resulting loop
-            annot = transform.annotate(new_loop,dim)
-            #
-            tiling_instrs += [new_instr + annot]
-
-        # If no vectorial tile, we scalarize the linalg op just after tiling
-        if len(self.vectorization) == 0:
-            scalarized, scalarization = transform.get_scalarize(current_state)
-            current_state = scalarized
-            
-        # Obtain a handler for patterns application
-        parent, parent_instr = transform.get_parent(current_state)
-        tiling_instrs.append(parent_instr)
-
-        # Canonicalize the code produced by the tiling operations
-        tiling_instrs += transform.tiling_apply_patterns(parent)
-
-        # Produce the vectorization instructions
-        vectorized,vectorize = transform.get_vectorize_children(parent)
-        apply_patterns0 = transform.vector_pre_hoist_apply_patterns(vectorized)
-        hoisted,hoist = transform.vector_hoist(vectorized)
-        lower_contract = transform.vector_lower_outerproduct_patterns(hoisted)
-        vect_instrs += [vectorize] + apply_patterns0 + [hoist] + lower_contract
-
-        # Produce the unrolling instructions using the annotations on loops
-        unroll_instrs = []
-        for dim,factor in self.unrolling.items():
-            loop,match_loop = transform.match_by_attribute(hoisted,dim)
-            unroll = transform.get_unroll(loop,factor)
-            unroll_instrs += [match_loop,unroll]
-            
-        lines = [seq_sig,"{"] + tiling_instrs + vect_instrs + unroll_instrs + [transform.get_terminator(),"}"]
-        return sym_name,"\n".join(lines)
 
     def main(self,ext_rtclock,ext_printF64,payload_func):
         results_types = [r.type for r in self.source_op.results]

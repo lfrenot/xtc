@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from xdsl.ir import Operation
 from AbsImplementer import AbsImplementer
 import transform
 
@@ -7,12 +8,14 @@ class PerfectlyNestedImplementer(AbsImplementer):
     def __init__(
             self,
             mlir_install_dir: str,
+            source_op: Operation,
             dims: dict[str,int],
             parallel_dims: list[str],
             reduction_dims: list[str]
     ):
         super().__init__(mlir_install_dir)
         #
+        self.source_op = source_op
         self.dims = dims
         self.parallel_dims = parallel_dims
         self.reduction_dims = reduction_dims
@@ -23,6 +26,42 @@ class PerfectlyNestedImplementer(AbsImplementer):
         self.parallelization = []
         self.unrolling = dict([])
 
+    def uniquely_match(self):
+
+        dims = self.dims.values()
+        
+        sym_name,input_var,seq_sig = transform.get_seq_signature(
+            input_consumed = False,
+            has_output = True,
+        )
+    
+        res_var, global_match_sig = transform.get_match_sig(input_var)
+        bb_input_var,bb_header = transform.get_bb_header()
+    
+        match_dims = transform.get_match_dims(bb_input_var,dims)
+        
+        match_opname = transform.get_match_op_name(bb_input_var,self.source_op.name)
+
+        tmyield = transform.get_match_structured_terminator(bb_input_var)
+    
+        tyield = transform.get_terminator(result = res_var)
+    
+        lines = [
+            seq_sig,
+            "{",
+            global_match_sig,
+            "{",
+            bb_header,
+        ] + match_dims + [
+            match_opname,
+            tmyield,
+            "}",
+            tyield,
+            "}"
+        ]
+
+        return sym_name,"\n".join(lines)
+        
     def materialize_schedule(self):
 
         sym_name,input_var,seq_sig = transform.get_seq_signature(
@@ -177,10 +216,6 @@ class PerfectlyNestedImplementer(AbsImplementer):
         
     @abstractmethod
     def payload(self,m,elt_type):
-        pass
-
-    @abstractmethod
-    def uniquely_match(self):
         pass
 
     @abstractmethod
