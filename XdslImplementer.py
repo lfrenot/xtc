@@ -108,7 +108,7 @@ class XdslImplementer(PerfectlyNestedImplementer):
             print_elapsed,
             func.Return(),
         ])
-        main_func = func.FuncOp.from_region("main", [], [], Region(main))
+        main_func = func.FuncOp.from_region("entry", [], [], Region(main))
         return main_func
 
     def build_rtclock(self):

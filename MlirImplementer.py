@@ -130,7 +130,7 @@ class MlirImplementer(PerfectlyNestedImplementer):
         #
         with InsertionPoint.at_block_begin(self.module.body):
             fmain = func.FuncOp(
-                name="main",
+                name="entry",
                 type=FunctionType.get(inputs=[], results=[]),
                 loc=self.loc,
             )
