@@ -1,4 +1,5 @@
-from utils import LazyImport
+import utils
+import numpy as np
 
 __all__ = [
     "Operation",
@@ -7,9 +8,8 @@ __all__ = [
     "OperatorMatmul",
 ]
 
-tvm = LazyImport("tvm")
-te = LazyImport("tvm.te")
-np = LazyImport("numpy")
+tvm = utils.LazyImport("tvm")
+te = utils.LazyImport("tvm.te")
 
 class Operation():
     def __init__(self, operator, args):
@@ -34,22 +34,41 @@ class Operation():
     def build(self):
         self.built = tvm.build(self.sch, self.params, self.tgt, name=self.operator.name)
 
-    def run(self):
+    def load_module(self, dll):
+        self.params = None
+        self.sch = None
+        self.built = tvm.runtime.load_module(dll)
+        assert self.built.implements_function(self.operator.name), f"Loaded module does not correspond to operator"
+
+    def run_eval(self, repeat=1, min_repeat_ms=0, number=1, validate=False):
         evaluator = self.built.time_evaluator(
             self.built.entry_name,
             self.dev,
-            min_repeat_ms=0,
-            repeat=1,
-            number=1
+            min_repeat_ms=min_repeat_ms,
+            repeat=repeat,
+            number=number,
         )
-        params = []
-        for shape, dtype in zip(self.operator.inputs_dims(*self.args), self.operator.inputs_types(*self.args)):
-            params.append(np.random.uniform(size=shape).astype(dtype))
-        for shape, dtype in zip(self.operator.outputs_dims(*self.args), self.operator.outputs_types(*self.args)):
-            params.append(np.random.uniform(size=shape).astype(dtype))
-        tvm_params = [tvm.nd.array(t) for t in params]
-        results = evaluator(*tvm_params).results
-        return min(results)
+        inputs = [
+            utils.np_init(shape=shape, dtype=dtype)
+            for shape, dtype in zip(self.operator.inputs_dims(*self.args), self.operator.inputs_types(*self.args))]
+        outputs = [
+            np.empty(shape=shape, dtype=dtype)
+            for shape, dtype in zip(self.operator.outputs_dims(*self.args), self.operator.outputs_types(*self.args))]
+        tvm_inputs = [tvm.nd.array(t) for t in inputs]
+        tvm_outputs = [tvm.nd.array(t) for t in outputs]
+        if validate:
+            ref_outs = [o.copy() for o in outputs]
+            self.operator.reference_impl(*inputs, *ref_outs)
+            self.built(*tvm_inputs, *tvm_outputs)
+            for ref_out, out in zip(ref_outs, tvm_outputs):
+                if not np.allclose(ref_out, out.numpy()):
+                    return [], 1, "Error in validation: outputs differ"
+        results = evaluator(*tvm_inputs, *tvm_outputs).results
+        return results, 0, ""
+
+    def run(self):
+        results, code, error = self.run_eval(repeat=1, min_repeat_ms=0, number=1)
+        return min(results) if code == 0 else error
 
     def lower(self):
         return tvm.lower(self.sch, self.params, simple_mode=True)
@@ -59,7 +78,7 @@ class Operator():
     name = "undef"
     @staticmethod
     def generate_op(i, j, k, dtype):
-        raise Excception("unimplemneted")
+        raise Exception("unimplemneted")
 
 
 class OperatorMatmul(Operator):
@@ -94,18 +113,32 @@ class OperatorMatmul(Operator):
     def outputs_types(i, j, k, dtype):
         return dtype,
 
+    @staticmethod
+    def reference_impl(*args):
+        np.matmul(args[0], args[1], out=args[2])
 
 class Operators():
     matmul = OperatorMatmul
 
 
-def test_matmul():
+def test_matmul(tdir="."):
     operation = Operation(Operators.matmul, (256, 256, 512, "float32"))
     operation.generate()
     operation.schedule()
     operation.build()
+    operation.built.export_library(f"{tdir}/tvm-payload.so")
     time = operation.run()
-    print(f"Execution time: {time} secs")
+    print(f"Execution time {operation.built.entry_name}: {time} secs")
+
+def test_load_and_run(tdir="."):
+    modlib = tvm.runtime.load_module(f"{tdir}/tvm-payload.so")
+    operation = Operation(Operators.matmul, (256, 256, 512, "float32"))
+    operation.built = modlib
+    time = operation.run()
+    print(f"Execution time {operation.built.entry_name}: {time} secs")
 
 if __name__ == "__main__":
-    test_matmul()
+    import tempfile
+    with tempfile.TemporaryDirectory() as tdir:
+        test_matmul(tdir)
+        test_load_and_run(tdir)

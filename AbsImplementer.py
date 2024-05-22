@@ -3,7 +3,10 @@ from abc import abstractmethod
 import subprocess
 import sys
 import os
+import tempfile
 
+import utils
+from evaluator import Evaluator, Executor
 import xdsl
 from xdsl.dialects.builtin import (
     f64,
@@ -402,6 +405,69 @@ class AbsImplementer(ABC):
                 outf.write("extern void entry(void); int main() { entry(); return 0; }")
             self.execute_command(cmd=exe_cmd, debug=debug)
 
+    def compile_and_evaluate(
+            self,
+            print_source_ir = False,
+            print_transformed_ir = False,
+            print_ir_after = [],
+            print_ir_before = [],
+            print_assembly = False,
+            color = True,
+            debug = False,
+            print_lowered_ir = False,
+            dump_file = None,
+    ):
+        with tempfile.TemporaryDirectory() as tdir:
+            if dump_file is None:
+                dump_file = f"{tdir}/payload"
+            self.compile(
+                print_source_ir = print_source_ir,
+                print_transformed_ir = print_transformed_ir,
+                print_ir_after = print_ir_after,
+                print_ir_before = print_ir_before,
+                print_assembly = print_assembly,
+                color = color,
+                debug = debug,
+                print_lowered_ir = print_lowered_ir,
+                dump_file = dump_file,
+                shared_lib = True,
+                executable = True,
+            )
+            exe_file = os.path.abspath(f"{dump_file}.out")
+            result = self.execute_command(
+                cmd=[f"{exe_file}"],
+                debug = debug,
+            )
+            return result.stdout
+
+    def load_and_evaluate(
+            self,
+            dll,
+            sym,
+            repeat = 1,
+            min_repeat_ms = 0,
+            number = 1,
+            validate = False,
+    ):
+        libpath = os.path.abspath(dll)
+        with utils.LibLoader(libpath) as lib:
+            func = getattr(lib, sym)
+            inputs_spec = self.np_inputs_spec()
+            outputs_spec = self.np_outputs_spec()
+            inputs = [utils.np_init(**spec) for spec in inputs_spec]
+            outputs = [np.empty(**spec) for spec in outputs_spec]
+            if validate:
+                ref_outputs = [np.empty(**spec) for spec in outputs_spec]
+                self.reference_impl(*inputs, *ref_outputs)
+                exec_func = Executor(func)
+                exec_func(*inputs, *outputs)
+                for out_ref, out in zip(ref_outputs, outputs):
+                    if not np.allclose(out_ref, out):
+                        return "Error in validation: outputs differ"
+            eval_func = Evaluator(func, repeat=repeat, min_repeat_ms=min_repeat_ms, number=number)
+            results = eval_func(*inputs, *outputs)
+        return min(results)
+
     def glue(self):
         # Generate the payload
         ext_rtclock = self.build_rtclock()
@@ -435,9 +501,21 @@ class AbsImplementer(ABC):
             + "}"
         )
         return str_glued
-    
+
     @abstractmethod
-    def payload(self,m,elt_type):
+    def np_inputs_spec(self):
+        pass
+
+    @abstractmethod
+    def np_outputs_spec(self):
+        pass
+
+    @abstractmethod
+    def reference_impl(self, *operands):
+        pass
+
+    @abstractmethod
+    def payload(self):
         pass
 
     @abstractmethod
