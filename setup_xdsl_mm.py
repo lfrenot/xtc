@@ -13,7 +13,7 @@ j = 128
 k = 1024
 elt_type = f32
 
-def mm():
+def mm1():
     
     operands_types = [TensorType(elt_type,shape)
                       for shape in [[i,k],[k,j],[i,j]]]
