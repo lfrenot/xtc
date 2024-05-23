@@ -280,7 +280,16 @@ def evaluate_one(scheduler, tile_strategy, op_args, in_x, args, callback=None):
             print_assembly=True,
             color=False,
         ))
-    stdout = impl.evaluate(**eval_args)
+    if args.eval == "jit":
+        stdout = impl.evaluate(**eval_args)
+    elif args.eval == "exe":
+        stdout = impl.compile_and_evaluate(**eval_args)
+    else:
+        assert args.eval == "eval"
+        impl.compile(**eval_args, shared_lib=True, dump_file="explore-payload")
+        stdout = impl.load_and_evaluate("explore-payload.so", impl.payload_name,
+                                        repeat=args.repeat, number=args.number, min_repeat_ms=args.min_repeat_ms,
+                                        validate=args.validate)
     logger.debug("STDOUT: %s", stdout)
     error = 0
     try:
@@ -451,6 +460,11 @@ def main():
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--output", type=str, default="results.csv", help="output csv file for search")
+    parser.add_argument("--eval", type=str, choices=["jit", "exe", "eval"], default="eval", help="evaluation method")
+    parser.add_argument("--repeat", type=int, default=5, help="evaluation repeat")
+    parser.add_argument("--number", type=int, default=1, help="evaluation number")
+    parser.add_argument("--min-repeat-ms", type=int, default=100, help="evaluation min repeat ms")
+    parser.add_argument("--validate", action=argparse.BooleanOptionalAction, help="validate results")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
     parser.add_argument("--dump", action=argparse.BooleanOptionalAction, help="dump IR while generating")
     args = parser.parse_args()

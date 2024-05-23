@@ -4,6 +4,7 @@ Some utilitary and math functions.
 
 import numpy as np
 import operator
+import ctypes
 from functools import reduce
 from typing import Dict, List, Union, Tuple, Any
 
@@ -195,3 +196,46 @@ def cpu_peak_time(ops: int, dtype: str, threads: int = 1) -> float:
     cycles = ops/info["ipc"]/info["vsize"][dtype]/threads
     time = cycles/info["freq"]
     return time
+
+
+def np_init(shape: tuple, dtype: str) -> np.ndarray:
+    """
+    Initialize and return a NP array filled
+    with numbers in [1, 9].
+    """
+    vals = np.arange(mulall(shape))
+    vals = vals % 9 + 1
+    return vals.reshape(shape).astype(dtype)
+
+
+class LibLoader():
+    """
+    Managed shared library loading.
+    This is a simple wrapper arround ctypes.LoadLibary which provides
+    context manager and a close() method to unload the loaded libary.
+    Note that unless when exiting the context manager or
+    with explicit call to close() method, the library is not unloaded.
+    """
+    def __init__(self, libpath: str) -> None:
+        self._lib = ctypes.cdll.LoadLibrary(libpath)
+        self._dlclose = ctypes.CDLL(None).dlclose
+        self._dlclose.argtypes = [ctypes.c_void_p]
+        self._dlclose.restype = ctypes.c_int
+
+    @property
+    def lib(self) -> ctypes.CDLL:
+        """ The ctypes lib handle """
+        return self._lib
+
+    def close(self) -> None:
+        """ Unload the loaded library, must be called only once """
+        self._dlclose(self._lib._handle)
+        self._lib = None
+
+    def __enter__(self) -> ctypes.CDLL:
+        """ Context manager returns the ctypes lib handle """
+        return self._lib
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """ Context manager unloads the library """
+        self.close()

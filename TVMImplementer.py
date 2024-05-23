@@ -39,6 +39,7 @@ class Implementer:
         self.vectorization = []
         self.parallelization = []
         self.unrolling = {}
+        self.payload_name = self.op.operator.name
         self._update_loops()
 
     def _update_loops(self):
@@ -93,7 +94,17 @@ class Implementer:
     def unroll(self, unrolling: dict[str,int]):
         self.unrolling = unrolling
 
+    def compile_and_evaluate(self, **kwargs):
+        self.compile(**kwargs)
+        time = self.op.run()
+        return time
+
     def evaluate(self, **kwargs):
+        self.compile(**kwargs)
+        time = self.op.run()
+        return time
+
+    def compile(self, dump_file=None, shared_lib=False, executable=False, **kwargs):
         print_source_ir = kwargs.get("print_source_ir", False)
         print_transformed_ir = kwargs.get("print_transformed_ir", False)
         print_assembly = kwargs.get("print_assembly", False)
@@ -129,8 +140,21 @@ class Implementer:
                     cmd_disassembler,
                     text=True
                 )
-        time = self.op.run()
-        return time
+        if dump_file is not None:
+            assert not executable, f"executable generation not supported yet for TVM"
+            if shared_lib:
+                self.op.built.export_library(f"{dump_file}.so")
+
+    def load_and_evaluate(self,
+                          dll,
+                          sym,
+                          repeat=1,
+                          min_repeat_ms=0,
+                          number=1,
+                          validate=False):
+        self.op.load_module(dll)
+        results, code, error = self.op.run_eval(repeat=repeat, number=number, min_repeat_ms=min_repeat_ms, validate=validate)
+        return min(results) if code == 0 else error
 
     def dump_schedule(self, obj=None, outf=sys.stdout):
         if obj is None:
