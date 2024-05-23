@@ -27,10 +27,12 @@ class XdslImplementer(PerfectlyNestedImplementer):
             dims: dict[str,int],
             parallel_dims: list[str],
             reduction_dims: list[str],
+            vectors_size = 16,
     ):
         #
         super().__init__(
             mlir_install_dir,
+            vectors_size,
             source_op,
             dims,
             parallel_dims,

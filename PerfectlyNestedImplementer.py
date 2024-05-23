@@ -8,12 +8,13 @@ class PerfectlyNestedImplementer(AbsImplementer):
     def __init__(
             self,
             mlir_install_dir: str,
+            vectors_size: int,
             source_op: Operation,
             dims: dict[str,int],
             parallel_dims: list[str],
             reduction_dims: list[str]
     ):
-        super().__init__(mlir_install_dir)
+        super().__init__(mlir_install_dir,vectors_size)
         #
         self.source_op = source_op
         self.dims = dims

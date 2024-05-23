@@ -12,6 +12,7 @@ i = 512
 j = 128
 k = 1024
 elt_type = f32
+vectors_size = 16
 
 operands_types = [TensorType(elt_type,shape)
                   for shape in [[i,k],[k,j],[i,j]]]
@@ -25,7 +26,8 @@ def mm1():
         source_op = matmul,
         dims = {'i':i,'j':j,'k':k},
         parallel_dims = ['i','j'],
-        reduction_dims = ['k']
+        reduction_dims = ['k'],
+        vectors_size = vectors_size
     )
 
     impl.tile("i",{'i1':8})
@@ -45,15 +47,16 @@ def mm4():
         source_op = matmul,
         dims = {'i':i,'j':j,'k':k},
         parallel_dims = ['i','j'],
-        reduction_dims = ['k']
+        reduction_dims = ['k'],
+        vectors_size = vectors_size
     )
 
-    impl.tile("i",{'i1':8})
-    impl.tile("j",{'j1':8})
+    impl.tile("i",{'i1':4})
+    impl.tile("j",{'j1':64})
     impl.tile("k",{'k1':8})
     impl.interchange(['i','j','k','k1','i1','j1'])
     impl.vectorize(['j1'])
     impl.parallelize(['i'])
-    impl.unroll({'k1':8,'i1':4})
+    impl.unroll({'i1':4,'k1':8})
 
     return impl
