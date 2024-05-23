@@ -18,7 +18,7 @@ operands_types = [TensorType(elt_type,shape)
 block0 = Block(arg_types=operands_types)
 matmul = linalg.MatmulOp((block0.args[0],block0.args[1]),(block0.args[2],),)
 
-def mm():
+def mm1():
 
     impl = MlirImplementer(
         mlir_install_dir=f"{home}/bin/llvm-xdsl",
