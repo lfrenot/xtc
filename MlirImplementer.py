@@ -1,9 +1,12 @@
+import sys
 from abc import ABC
 import subprocess
 import numpy
 
-from mlir.ir import *
+
 import mlir
+from mlir.ir import *  # TODO: segfault after TVM
+
 from mlir.dialects import (
     arith,
     builtin,
