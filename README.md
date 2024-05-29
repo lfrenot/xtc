@@ -5,14 +5,6 @@
 The previous version relied on XDSL (file Implementer.py). The current
 one relies on upstream MLIR bindings.
 
-### Install xdsl (for old scripts)
-
-```
-git clone git@github.com:xdslproject/xdsl.git
-cd xdsl
-pip install -e .
-```
-
 ### Install the right version of MLIR
 
 Install dependencies (Debian):
@@ -29,21 +21,12 @@ git checkout 98e674c9f16d677d95c67bc130e267fae331e43c
 git apply /path/to/each/patch
 ```
 
-Compile MLIR and the MLIR python bindings:
+Compile MLIR/CLANG and the MLIR python bindings:
 ```
 pip install -r mlir/python/requirements.txt
 mkdir build
 cd build
-cmake -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=ON \
-  -DCMAKE_INSTALL_PREFIX=$HOME/bin/llvm-xdsl -DCMAKE_BUILD_TYPE=Release \
-  -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_ASM_COMPILER=clang \
-  -DCMAKE_SHARED_LINKER_FLAGS="-fno-omit-frame-pointer" \
-  -DCMAKE_EXE_LINKER_FLAGS="-fno-omit-frame-pointer" ../llvm
-make -j4
-make install
-cmake -DLLVM_ENABLE_PROJECTS=clang -DLLVM_BUILD_EXAMPLES=ON \
+cmake -DLLVM_ENABLE_PROJECTS="clang;mlir" -DLLVM_BUILD_EXAMPLES=ON \
   -DCMAKE_INSTALL_PREFIX=$HOME/bin/llvm-xdsl -DCMAKE_BUILD_TYPE=Release \
   -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
   -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_C_COMPILER=clang \
@@ -68,7 +51,7 @@ pip install -r requirements.txt
 For using tvm backend, install TVM and do (on pinocchio use for instance TVM installed in `/opt/local/tvm/tvm-v0.16.0.rc0/`):
 ```
 pip install -r tvm_requirements.txt
-export PYTHONPATH=/path_to_tvm/python
+export PYTHONPATH=$PYTHONPATH:/path_to_tvm/python
 ```
 
 ## Use it
