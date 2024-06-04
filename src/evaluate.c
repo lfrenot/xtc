@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdint.h>
 #include <time.h>
 
 typedef void (*func0_t)();
@@ -8,6 +9,15 @@ typedef void (*func3_t)(void *,void *,void *);
 typedef void (*func4_t)(void *,void *,void *,void *);
 typedef void (*func5_t)(void *,void *,void *,void *,void *);
 typedef void (*func6_t)(void *,void *,void *,void *,void *,void *);
+
+typedef union {
+  int64_t v_int64;
+  double v_float64;
+  void *v_handle;
+  char *v_str;
+} PackedArg;
+
+typedef int (*packed_func_t)(PackedArg *, int *, int,PackedArg *,int *);
 
 #define FCLOCK() ({					\
       struct timespec ts_;				\
@@ -26,7 +36,7 @@ typedef void (*func6_t)(void *,void *,void *,void *,void *,void *);
   assert(min_repeat_ms >= 0);						\
 									\
   mem_barrier();							\
-  func(__VA_ARGS__);							\
+  (void)func(__VA_ARGS__);						\
   mem_barrier();							\
 									\
   for (int r = 0; r < repeat; r++) {					\
@@ -36,7 +46,7 @@ typedef void (*func6_t)(void *,void *,void *,void *,void *,void *);
       elapsed = FCLOCK();						\
       for (int a = 0; a < attempts; a++) {				\
 	mem_barrier();							\
-	func(__VA_ARGS__);						\
+	(void)func(__VA_ARGS__);					\
 	mem_barrier();							\
       }									\
       elapsed = FCLOCK() - elapsed;					\
@@ -46,6 +56,16 @@ typedef void (*func6_t)(void *,void *,void *,void *,void *,void *);
     }									\
     results[r] = elapsed / attempts;					\
   }									\
+}
+
+void evaluate_packed(double *results, int repeat,
+		     int number, int min_repeat_ms,
+		     packed_func_t func, PackedArg *args, int *codes, int nargs)
+{
+  PackedArg res;
+  int res_code = 0;
+  res.v_int64 = 0;
+  define_evaluateN(func, args, codes, nargs, &res, &res_code);
 }
 
 void evaluate0(double *results, int repeat,
@@ -97,6 +117,7 @@ void evaluate6(double *results, int repeat,
   define_evaluateN(func, arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
+
 void evaluate(double *results, int repeat,
 	      int number, int min_repeat_ms,
 	      void (*func)(), void **args, int nargs)
@@ -135,5 +156,3 @@ void evaluate(double *results, int repeat,
     break;
   }
 }
-
-			 

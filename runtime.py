@@ -7,6 +7,8 @@ __all__ = [
     "compile_runtime",
 ]
 
+from runtime_types import DLDevice, DLDataType
+
 _runtime_funcs = {
     "evaluate": {
         "sym": "evaluate",
@@ -17,16 +19,72 @@ _runtime_funcs = {
             ctypes.c_int,
             ctypes.CFUNCTYPE(ctypes.c_voidp),
             ctypes.POINTER(ctypes.c_voidp),
+        ],
+        "restype": None,
+    },
+    "evaluate_packed": {
+        "sym": "evaluate_packed",
+        "argtypes": [
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.CFUNCTYPE(ctypes.c_voidp),
+            ctypes.POINTER(ctypes.c_voidp),
+            ctypes.POINTER(ctypes.c_int),
             ctypes.c_int,
         ],
-        "restypes": None,
+        "restype": None,
     },
-        
+    "cndarray_new": {
+        "sym": "CNDArray_new",
+        "argtypes": [
+            ctypes.c_int32,
+            ctypes.POINTER(ctypes.c_int64),
+            DLDataType,
+            DLDevice,
+        ],
+        "restype": ctypes.c_voidp,
+    },
+    "cndarray_del": {
+        "sym": "CNDArray_del",
+        "argtypes": [
+            ctypes.c_voidp,
+        ],
+        "restype": None,
+    },
+    "cndarray_copy_from_data": {
+        "sym": "CNDArray_copy_from_data",
+        "argtypes": [
+            ctypes.c_voidp,
+            ctypes.c_voidp,
+        ],
+        "restype": None,
+    },
+    "cndarray_copy_to_data": {
+        "sym": "CNDArray_copy_to_data",
+        "argtypes": [
+            ctypes.c_voidp,
+            ctypes.c_voidp,
+        ],
+        "restype": None,
+    },
+    "cndarray_set_alloc_alignment": {
+        "sym": "CNDArray_set_alloc_alignment",
+        "argtypes": [
+            ctypes.c_int64,
+        ],
+        "restype": None,
+    },
 }
 
 def compile_runtime(out_dll):
-    src_file = f"{os.path.dirname(__file__)}/src/runtime.c"
-    cmd = ["cc", "--shared", "-O2", "-o", out_dll, src_file]
+    debug = False # True for verbose
+    debug_opts = ["-DRUNTIME_DEBUG=1"] if debug else []
+    files = ["evaluate.c", "cndarray.c", "alloc.c"]
+    src_dir = f"{os.path.dirname(__file__)}/src"
+    src_files = [f"{src_dir}/{file}" for file in files]
+    cmd = ["cc", "--shared", "-O2", "-fPIC", "-I", src_dir, *debug_opts, "-o", out_dll, *src_files]
     p = subprocess.run(cmd, text=True)
     assert p.returncode == 0, f"unable to compile runtime: {' '.join(cmd)}"
 
@@ -50,7 +108,7 @@ def _resolve_runtime():
     for name, func_info in _runtime_funcs.items():
         _runtime_entries[name] = getattr(_runtime_lib, func_info["sym"])
         _runtime_entries[name].argtypes = func_info["argtypes"]
-        _runtime_entries[name].restypes = func_info["restypes"]
+        _runtime_entries[name].restype = func_info["restype"]
     
     
 def __getattr__(x):

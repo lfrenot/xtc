@@ -145,16 +145,40 @@ class Implementer:
             if shared_lib:
                 self.op.built.export_library(f"{dump_file}.so")
 
-    def load_and_evaluate(self,
+    def load_and_evaluate(
+            self,
+            dll,
+            sym,
+            repeat = 1,
+            min_repeat_ms = 0,
+            number = 1,
+            validate = False,
+            parameters = None,
+    ):
+        results, code, error = self.load_and_eval(
+            dll,
+            sym,
+            repeat=repeat,
+            min_repeat_ms=min_repeat_ms,
+            number=number,
+            validate=validate,
+            parameters=parameters,
+        )
+        if code == 0:
+            return min(results)
+        else:
+            return error
+
+    def load_and_eval(self,
                           dll,
                           sym,
                           repeat=1,
                           min_repeat_ms=0,
                           number=1,
-                          validate=False):
-        self.op.load_module(dll)
-        results, code, error = self.op.run_eval(repeat=repeat, number=number, min_repeat_ms=min_repeat_ms, validate=validate)
-        return min(results) if code == 0 else error
+                          validate=False,
+                          parameters=None):
+        results, code, error = self.op.run_eval_dll(dll, sym, repeat=repeat, number=number, min_repeat_ms=min_repeat_ms, validate=validate, parameters=parameters)
+        return results, code, error
 
     def dump_schedule(self, obj=None, outf=sys.stdout):
         if obj is None:
@@ -190,6 +214,12 @@ class Implementer:
             if len(self.parallelization) > 1:
                 print(f"{self.parallelization[0]} = {sch}[O].fuse({', '.join(self.parallelization)})", file=outf)
             print(f"{sch}[O].parallel({self.parallelization[0]})", file=outf)
+
+    def np_inputs_spec(self):
+        return self.op.np_inputs_spec()
+
+    def np_outputs_spec(self):
+        return self.op.np_outputs_spec()
 
 def _test_generate_tiling_1():
     dims = {"i": 256, "j": 256, "k": 512}
