@@ -315,6 +315,7 @@ class Implementer():
             debug = False,
             shared_lib = False,
             executable = False,
+            **kwargs
     ) -> None:
         assert not executable, "TODO: executable output not implemented"
         assert shared_lib, "TODO: shared_lib mandatory"
