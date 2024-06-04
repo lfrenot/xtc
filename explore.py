@@ -45,6 +45,7 @@ import csv
 import random
 import numpy as np
 from tqdm import tqdm
+import subprocess
 
 import utils
 from ndarray import NDArray
@@ -497,6 +498,25 @@ STRATEGIES = {
     },
 }
 
+def launch_child(argv, args):
+    env = {}
+    if "tvm" in args.backends:
+        # Force number of threads for TVM
+        env.update({"TVM_NUM_THREADS": str(args.threads)})
+    cmd = ["env", *(f"{k}={v}" for k, v in env.items()), "setarch", "-R", "--", argv[0], "--child", *argv[1:]]
+    code = 0
+    logger.debug("Executing child command: %s", ' '.join(cmd))
+    try:
+        subprocess.run(
+            args=cmd,
+            check=True,
+        )
+    except :
+        print(f"ERROR: executing child command: {' '.join(cmd)}", file=sys.stderr)
+        code = 1
+    raise SystemExit(code)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Autotune Matmult",
@@ -521,6 +541,7 @@ def main():
     parser.add_argument("--validate", action=argparse.BooleanOptionalAction, help="validate results")
     parser.add_argument("--save-temps", action=argparse.BooleanOptionalAction, help="save temps to save temps dir")
     parser.add_argument("--save-temps-dir", type=str, help="save temps dir, default to ./save_temps_dir")
+    parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
     parser.add_argument("--dump", action=argparse.BooleanOptionalAction, help="dump IR while generating")
     args = parser.parse_args()
@@ -530,6 +551,9 @@ def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
+    if not args.child:
+        launch_child(sys.argv, args)
+
     if args.seed >= 0:
         np.random.seed(args.seed)
         random.seed(args.seed)
@@ -537,16 +561,12 @@ def main():
     global THREADS
     THREADS = args.threads
 
-    if "tvm" in args.backends:
-        # Force number of threads for TVM
-        os.environ["TVM_NUM_THREADS"] = str(args.threads)
+    if args.eval == "eval":
+        args.eval_parameters = get_eval_parameters(args)
 
     # Hack to ensure that TVM backend is after MLIR backends,
     # otherwise the import of tvm breaks the MLIR python bindings
     args.backends = sorted(args.backends)
-
-    if args.eval == "eval":
-        args.eval_parameters = get_eval_parameters(args)
 
     optimize(args)
 
