@@ -11,6 +11,7 @@ from JIROps import Operation, Operators
 from xdsl.printer import Printer
 from xdsl.dialects.builtin import ModuleOp, StringAttr
 from jir.util import get_host_target_triple
+from jir.backend.util.annotate_fastmath import annotate_fastmath
 from jir.parser import JIRParser, JIRFormatter
 from jir.transform.util.index import JIRFunctionDimensionIndex
 from jir.context import JIRFunctionContext
@@ -231,7 +232,7 @@ class Implementer():
         if self._op_function_mlir is not None:
             return self._op_function_mlir
         polygeist_compiler = PolygeistCompiler(f"{self.geist_install_dir}/bin/cgeist")
-        self._op_function_mlir = polygeist_compiler(self.op_function)
+        self._op_function_mlir = annotate_fastmath(polygeist_compiler(self.op_function))
         return self._op_function_mlir
 
     def _generate_module_for(self, ctx: JIRFunctionContext) -> ModuleOp:
