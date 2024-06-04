@@ -202,7 +202,8 @@ class TransformAdaptor():
 
 
 class Implementer():
-    target_triple = None # default to native
+    target_triple = None # default to host
+    target_arch = "native"
     save_temps = False
     save_temps_dir = "./save_temps_dir"
 
@@ -319,12 +320,14 @@ class Implementer():
         assert shared_lib, "TODO: shared_lib mandatory"
         module = self.compile_jir_module()
         target_triple = self.target_triple
+        target_arch = self.target_arch
         mlir_lowering = MLIRLowering(f"{self.jir_install_dir}/bin/mlir-opt")
         mlir2llvm = MLIR2LLVMConversion(f"{self.jir_install_dir}/bin/mlir-translate")
         llvm_compiler = LLVMSharedLibraryCompiler(
             f"{self.jir_install_dir}/bin/clang",
             f"{self.jir_install_dir}/lib",
             target_triple,
+            target_arch,
         )
         computation_primitives = self._get_op_function_mlir()
         computation_module = str(merge_mlir_modules_by_content(str(module), computation_primitives))
