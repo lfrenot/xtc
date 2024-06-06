@@ -2,6 +2,7 @@ import os
 import ctypes
 import tempfile
 import subprocess
+import threading
 
 __all__ = [
     "compile_runtime",
@@ -88,28 +89,37 @@ def compile_runtime(out_dll):
     p = subprocess.run(cmd, text=True)
     assert p.returncode == 0, f"unable to compile runtime: {' '.join(cmd)}"
 
+_runtime_lib_lock = threading.Lock()
 _runtime_lib = None
 def _compile():
     global _runtime_lib
+    global _runtime_lib_lock
     if _runtime_lib is not None:
         return
-    with tempfile.TemporaryDirectory() as tdir:
-        lib_path = f"{tdir}/runtime.so"
-        compile_runtime(lib_path)
-        _runtime_lib = ctypes.CDLL(lib_path)
+    with _runtime_lib_lock:
+        if _runtime_lib is not None:
+            return
+        with tempfile.TemporaryDirectory() as tdir:
+            lib_path = f"{tdir}/runtime.so"
+            compile_runtime(lib_path)
+            _runtime_lib = ctypes.CDLL(lib_path)
 
+_runtime_entries_lock = threading.Lock()
 _runtime_entries = None
 def _resolve_runtime():
     global _runtime_entries
+    global _runtime_entries_lock
     if _runtime_entries is not None:
         return
-    _compile()
-    _runtime_entries = {}
-    for name, func_info in _runtime_funcs.items():
-        _runtime_entries[name] = getattr(_runtime_lib, func_info["sym"])
-        _runtime_entries[name].argtypes = func_info["argtypes"]
-        _runtime_entries[name].restype = func_info["restype"]
-    
+    with _runtime_entries_lock:
+        if _runtime_entries is not None:
+            return
+        _compile()
+        _runtime_entries = {}
+        for name, func_info in _runtime_funcs.items():
+            _runtime_entries[name] = getattr(_runtime_lib, func_info["sym"])
+            _runtime_entries[name].argtypes = func_info["argtypes"]
+            _runtime_entries[name].restype = func_info["restype"]
     
 def __getattr__(x):
     _resolve_runtime()

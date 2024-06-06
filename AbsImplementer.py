@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os
 import tempfile
+from pathlib import Path
 
 import utils
 from evaluator import Evaluator, Executor
@@ -332,8 +333,10 @@ class AbsImplementer(ABC):
             debug = False,
             print_lowered_ir = False,
             shared_lib = False,
-            executable = False
+            executable = False,
+            **kwargs,
     ):
+        save_temps = kwargs.get("save_temps", False)
         ir_dump_file = f"{dump_file}.ir"
         bc_dump_file = f"{dump_file}.bc"
         obj_dump_file = f"{dump_file}.o"
@@ -405,6 +408,12 @@ class AbsImplementer(ABC):
             with open(exe_c_file, "w") as outf:
                 outf.write("extern void entry(void); int main() { entry(); return 0; }")
             self.execute_command(cmd=exe_cmd, debug=debug)
+
+        if not save_temps:
+            Path(ir_dump_file).unlink(missing_ok=True)
+            Path(bc_dump_file).unlink(missing_ok=True)
+            Path(obj_dump_file).unlink(missing_ok=True)
+            Path(exe_c_file).unlink(missing_ok=True)
 
     def compile_and_evaluate(
             self,
