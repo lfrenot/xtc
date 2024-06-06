@@ -54,26 +54,20 @@ logger = logging.getLogger(__name__)
 
 def xdsl_matmul(i, j, k, ftype):
     from xdsl.dialects import func,linalg
-    from xdsl.dialects.builtin import TensorType, f32, f64
+    from xdsl.dialects.builtin import MemRefType, f32, f64
     from xdsl.ir import Block
     elt_type = {"f32": f32, "f64": f64}[ftype]
-    operands_types = [TensorType(elt_type, shape)
+    operands_types = [MemRefType(elt_type, shape)
                       for shape in [[i,k], [k,j], [i,j]]]
     block0 = Block(arg_types=operands_types)
-    matmul = linalg.MatmulOp((block0.args[0], block0.args[1]), (block0.args[2],),)
+    matmul = linalg.MemRefMatmulOp(
+        inputs=(block0.args[0], block0.args[1]),
+        outputs=(block0.args[2],),
+    )
     return matmul
 
 def xdsl_matmul_sched(i, j, k, ftype, args):
-    from XdslImplementer import XdslImplementer as impl
-    op_matmul = xdsl_matmul(i, j, k, ftype)
-    sched = impl(
-        mlir_install_dir=f"{HOME}/bin/llvm-xdsl",
-        source_op=op_matmul,
-        dims = {'i':i,'j':j,'k':k},
-        parallel_dims = ['i','j'],
-        reduction_dims = ['k'],
-    )
-    return sched, op_matmul, "xdsl"
+    assert False, "The XDSL implementer does not exist anymore"
 
 def mlir_matmul_sched(i, j, k, ftype, args):
     from MlirImplementer import MlirImplementer as impl
