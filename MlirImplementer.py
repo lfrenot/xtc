@@ -14,6 +14,7 @@ from mlir.ir import (
     F64Type,
     MemRefType,
     FunctionType,
+    UnitAttr
 )
 
 from mlir.dialects import (
@@ -58,6 +59,7 @@ class MlirImplementer(PerfectlyNestedImplementer):
         self.ctx = Context()
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp(loc = self.loc)
+        self.module.operation.attributes["transform.with_named_sequence"] = UnitAttr.get(context=self.ctx)
 
         if str(source_op.operands[0].type.get_element_type()) == 'f32':
             self.elt_type = F32Type.get(context = self.ctx)
@@ -120,15 +122,18 @@ class MlirImplementer(PerfectlyNestedImplementer):
     
     def payload(self):
         xdsl_func = self.xdsl_operator_to_function()
-        with InsertionPoint.at_block_begin(self.module.body), self.loc as loc:
-            f = func.FuncOp.parse(str(xdsl_func))
-        entry_block = f.regions[0].blocks[0]
+        mlir_func = func.FuncOp.parse(str(xdsl_func),context = self.ctx)
+        entry_block = mlir_func.regions[0].blocks[0]
         outputs = entry_block.arguments[len(self.source_op.inputs):]
         with InsertionPoint.at_block_begin(entry_block), self.loc as loc:
             scal = arith.ConstantOp(self.elt_type,0.0)
             for o in outputs:
                 linalg.fill(scal,outs=[o])
-        return f
+
+        ip = InsertionPoint.at_block_begin(self.module.body)
+        ip.insert(mlir_func)
+        
+        return mlir_func
         
     def main(self,frtclock,fprint,fmatmul):
         #

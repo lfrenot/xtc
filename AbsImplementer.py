@@ -510,17 +510,13 @@ class AbsImplementer(ABC):
         return np.array(results), 0, ""
 
     def glue(self):
+        
         # Generate the payload
         ext_rtclock = self.build_rtclock()
         ext_printF64 = self.build_printF64()
         payload_func = self.payload()
         main_func = self.main(ext_rtclock,ext_printF64,payload_func)
-        str_mod = "\n".join([str(tl) for tl in [
-            ext_rtclock,
-            ext_printF64,
-            payload_func,
-            main_func,
-        ]])
+        
         # Generate the schedule
         match_sym_name,str_trans_match = self.uniquely_match()
         sched_sym_name,str_trans_sched = self.materialize_schedule()
@@ -528,11 +524,8 @@ class AbsImplementer(ABC):
             matchers_transformers = [(match_sym_name,sched_sym_name)],
             vectors_size = self.vectors_size,
         )
-        # Glue
-        str_glued = (
+        trans_script = (
             "module attributes {transform.with_named_sequence} {"
-            + "\n"
-            + str_mod
             + "\n"
             + str_trans_sched
             + "\n"
@@ -542,6 +535,13 @@ class AbsImplementer(ABC):
             + "\n"
             + "}"
         )
+        trans_match = Module.parse(trans_script,context=self.ctx)
+        with InsertionPoint(self.module.body):
+            for o in trans_match.body.operations:
+                o.operation.clone()
+
+        # Glue
+        str_glued = str(self.module)
         return str_glued
 
     @abstractmethod
