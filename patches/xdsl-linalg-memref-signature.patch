@@ -1,5 +1,5 @@
 diff --git a/xdsl/dialects/linalg.py b/xdsl/dialects/linalg.py
-index 1c867b15..e4eac7db 100644
+index 1c867b15..1c32d292 100644
 --- a/xdsl/dialects/linalg.py
 +++ b/xdsl/dialects/linalg.py
 @@ -625,7 +625,7 @@ class MatmulOp(IRDLOperation):
@@ -11,7 +11,7 @@ index 1c867b15..e4eac7db 100644
  
      assembly_format = (
          "`ins` `(` $inputs `:` type($inputs) `)` ` ` "
-@@ -649,6 +649,41 @@ class MatmulOp(IRDLOperation):
+@@ -649,6 +649,35 @@ class MatmulOp(IRDLOperation):
              result_types=result_types,
          )
  
@@ -40,15 +40,9 @@ index 1c867b15..e4eac7db 100644
 +        self,
 +        inputs: Sequence[SSAValue],
 +        outputs: Sequence[SSAValue] = (),
-+        res: Sequence[Attribute] | None = None,
 +    ):
-+        if res is None:
-+            result_types = tuple(output.type for output in outputs)
-+        else:
-+            result_types = res
 +        super().__init__(
 +            operands=(inputs, outputs),
-+            result_types=result_types,
 +        )
  
  class PoolingOpsBase(IRDLOperation, ABC):

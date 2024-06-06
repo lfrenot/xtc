@@ -3,7 +3,7 @@ import os
 from MlirImplementer import MlirImplementer
 
 from xdsl.dialects import func,linalg
-from xdsl.dialects.builtin import TensorType,f32
+from xdsl.dialects.builtin import TensorType,MemRefType,f32
 from xdsl.ir import Block
 
 home = os.environ.get("HOME","")
@@ -14,10 +14,13 @@ k = 1024
 elt_type = f32
 vectors_size = 16
 
-operands_types = [TensorType(elt_type,shape)
+operands_types = [MemRefType(elt_type,shape)
                   for shape in [[i,k],[k,j],[i,j]]]
 block0 = Block(arg_types=operands_types)
-matmul = linalg.MatmulOp((block0.args[0],block0.args[1]),(block0.args[2],),)
+matmul = linalg.MemRefMatmulOp(
+    inputs=(block0.args[0],block0.args[1]),
+    outputs = (block0.args[2],),
+)
 
 def mm1():
 
