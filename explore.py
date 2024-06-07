@@ -56,6 +56,9 @@ from ndarray import NDArray
 
 logger = logging.getLogger(__name__)
 
+def mlir_init():
+    from MlirImplementer import MlirImplementer as impl
+
 def xdsl_matmul(i, j, k, ftype):
     from xdsl.dialects import func,linalg
     from xdsl.dialects.builtin import MemRefType, f32, f64
@@ -70,9 +73,6 @@ def xdsl_matmul(i, j, k, ftype):
     )
     return matmul
 
-def xdsl_matmul_sched(i, j, k, ftype, args):
-    assert False, "The XDSL implementer does not exist anymore"
-
 def mlir_matmul_sched(i, j, k, ftype, args):
     from MlirImplementer import MlirImplementer as impl
     op_matmul = xdsl_matmul(i, j, k, ftype)
@@ -84,6 +84,11 @@ def mlir_matmul_sched(i, j, k, ftype, args):
         reduction_dims = ['k'],
     )
     return sched, op_matmul, "mlir"
+
+def tvm_init():
+    import tvm
+    import tvm.te
+    import TVMImplementer as impl
 
 def tvm_matmul(i, j, k, ftype):
     import TVMImplementer as impl
@@ -99,6 +104,9 @@ def tvm_matmul_sched(i, j, k, ftype, args):
         parallel_dims=["i", "j"],
     )
     return sched, op_matmul, "tvm"
+
+def jir_init():
+    import JIRImplementer as impl
 
 def jir_matmul(i, j, k, ftype):
     import JIRImplementer as impl
@@ -157,7 +165,7 @@ def tile_generator_3d(op_args, size=None):
     all_in_x = list(itertools.product(*all_tiles))
     logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     # Filter out last level if > 1024 vector elems
-    all_in_x = [x for x in all_in_x if utils.mulall(x)/min(x[1], 16) <= 1024]
+    all_in_x = [x for x in all_in_x if utils.mulall(x)/min(x[1], 16) <= MAX_UNROLL]
     logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     return np.array(all_in_x)
 
@@ -206,7 +214,7 @@ def tile_generator_4d(op_args, size=None):
     logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     # Filter out last level if > 1024 vector elems.
     # x[1] is the tile size for the vector axis, x[-1] in [1, 4] is true when the vector axis is inner
-    all_in_x = [x for x in all_in_x if utils.mulall(x[:-1])/min(x[1], max((x[-1] in [1, 4])*16, 1)) <= 1024]
+    all_in_x = [x for x in all_in_x if utils.mulall(x[:-1])/min(x[1], max((x[-1] in [1, 4])*16, 1)) <= MAX_UNROLL]
     logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     return np.array(all_in_x)
 
@@ -257,7 +265,7 @@ def tile_generator_7d(op_args, size=None):
     logger.debug(f"Raw space size: {space_size} for problem dims: {i}x{j}x{k}")
     def in_space(x):
         # Filter out last level if > 1024 vector elems
-        return x[2]*x[5]*x[6]/min(x[5], 16) <= 1024
+        return x[2]*x[5]*x[6]/min(x[5], 16) <= MAX_UNROLL
     if size is None or size >= space_size:
         logger.debug(f"Generate exhaustive")
         # Exhaustive
@@ -309,59 +317,7 @@ def get_eval_parameters(args):
     nd_outputs = [NDArray(np.empty(**spec)) for spec in outputs_spec]
     return (nd_inputs, nd_outputs)
 
-def evaluate_one(ident, scheduler, tile_strategy, op_args, in_x, args, callback=None):
-    assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
-    logger.debug("Compile and Evaluate: %s: %s...", ident, in_x)
-    impl, op, backend = scheduler(*op_args, args)
-    tile_strategy(impl, op_args, in_x)
-    eval_args = {}
-    if args.dump:
-        eval_args.update(dict(
-            print_source_ir=True,
-            print_transformed_ir=True,
-            print_lowered_ir=True,
-            print_assembly=True,
-            color=False,
-        ))
-    if args.save_temps:
-        eval_args.update(dict(
-            save_temps=True,
-            save_temps_dir=f"{args.save_temps_dir}/{ident}",
-        ))
-    if args.eval == "jit":
-        stdout = impl.evaluate(**eval_args)
-    elif args.eval == "exe":
-        stdout = impl.compile_and_evaluate(**eval_args)
-    else:
-        assert args.eval == "eval"
-        dump_file = f"payload_{ident}"
-        impl.compile(**eval_args, shared_lib=True, dump_file=dump_file)
-        payload_lib = f"{dump_file}.so"
-        payload_name = impl.payload_name
-        stdout = impl.load_and_evaluate(payload_lib, impl.payload_name,
-                                        repeat=args.repeat, number=args.number, min_repeat_ms=args.min_repeat_ms,
-                                        validate=args.validate, parameters=args.eval_parameters)
-        if not args.save_temps:
-            Path(payload_lib).unlink(missing_ok=True)
-    error = 0
-    try:
-        # TODO: for now we detect errors when trying to parse the result
-        time = float(stdout)
-    except ValueError:
-        time = 0
-        error = 1
-
-    if error == 0:
-        logger.debug("  Evaluated: %s: %s: time: %.2f msecs", ident, in_x, time*1000)
-    else:
-        logger.error("Error evaluating: %s: %s", ident, in_x)
-
-    result = (in_x, error, time, backend)
-    if callback:
-        callback(result)
-    return result
-
-def compile_one_backends(ident, tile_strategy, tile_generator, op_args, in_x, args, callback):
+def compile_one_backends(ident, tile_strategy, op_args, in_x, args, callback):
     compiled = []
     for backend in args.backends:
         scheduler = OPERATORS[args.operator]["backends"][backend]["scheduler"]
@@ -404,7 +360,7 @@ def load_and_evaluate_one(ident, backend, impl, dump_file, in_x, args, callback=
                                     repeat=args.repeat, number=args.number, min_repeat_ms=args.min_repeat_ms,
                                     validate=args.validate, parameters=args.eval_parameters)
     if not args.save_temps:
-        Path(payload_lib).unlink(missing_ok=True)
+        Path(payload_lib).unlink()
     error = 0
     try:
         # TODO: for now we detect errors when trying to parse the result
@@ -423,28 +379,82 @@ def load_and_evaluate_one(ident, backend, impl, dump_file, in_x, args, callback=
         callback(result)
     return result
 
-def evaluate_all_parallel(tile_strategy, tile_generator, all_in_x, op_args, args, callback):
+def evaluate_all_parallel(tile_strategy, all_in_x, op_args, args, callback):
     jobs = args.jobs
-    compile_callback = None
-    for job_idx, job_in_x in enumerate(tqdm(np.array_split(all_in_x, np.ceil(len(all_in_x)/jobs), axis=0), smoothing=1)):
-        with ThreadPoolExecutor(max_workers=jobs) as executor:
-            futures = [
-                executor.submit(
-                    compile_one_backends,
-                    job_idx * jobs + idx,
-                    tile_strategy,
-                    tile_generator,
-                    op_args,
-                    in_x.tolist(),
-                    args,
-                    compile_callback)
-                for idx, in_x in enumerate(job_in_x)
-            ]
-            job_compiled = [future.result() for future in futures]
-        for compiled_list in job_compiled:
-            for compiled in compiled_list:
-                ident, backend, impl, dump_file, in_x = compiled
-                load_and_evaluate_one(ident, backend, impl, dump_file, in_x, args, callback=callback)
+    def do_compile(idx, in_x):
+        return idx, compile_one_backends(
+            ident=f"{idx:04}",
+            in_x=in_x,
+            tile_strategy=tile_strategy,
+            op_args=op_args,
+            args=args,
+            callback=None
+        )
+    nback = len(args.backends)
+    ntasks = len(all_in_x) * nback
+    allbar = tqdm(desc="Overall", colour="red", total=ntasks, position=0, smoothing=0, disable=args.quiet)
+    compbar = tqdm(desc="Compile", colour="blue", total=ntasks, position=1, smoothing=0, disable=args.quiet)
+    if args.execute:
+        evalbar = tqdm(desc="Execute", colour="green", total=ntasks, position=2, smoothing=0, disable=args.quiet)
+    try:
+        for job_idx, job_in_x in enumerate(np.array_split(all_in_x, np.ceil(len(all_in_x)/jobs), axis=0)):
+            compbar.unpause()
+            job_compiled = []
+            if jobs == 1:
+                job_compiled.append(
+                    do_compile(
+                        idx=job_idx,
+                        in_x=job_in_x[0].tolist(),
+                    ))
+                compbar.update(nback)
+                compbar.refresh()
+                if not args.execute:
+                    allbar.update(nback)
+                    allbar.refresh()
+            else:
+                def future_callback(future):
+                    job_compiled.append(future.result())
+                    compbar.update(nback)
+                    compbar.refresh()
+                    if not args.execute:
+                        allbar.update(nback)
+                        allbar.refresh()
+
+                with ThreadPoolExecutor(max_workers=jobs) as executor:
+                    futures = [
+                        executor.submit(
+                            do_compile,
+                            idx=job_idx * jobs + idx,
+                            in_x=in_x.tolist(),
+                        )
+                        for idx, in_x in enumerate(job_in_x)
+                    ]
+                    for future in futures:
+                        future.add_done_callback(future_callback)
+            compbar.update(0)
+            compbar.refresh()
+            allbar.update(0)
+            allbar.refresh()
+
+            if args.execute:
+                compiled_results =[x[1] for x in sorted(job_compiled, key=lambda x: x[0])]
+                evalbar.unpause()
+                for compiled_list in compiled_results:
+                    for compiled in compiled_list:
+                        ident, backend, impl, dump_file, in_x = compiled
+                        load_and_evaluate_one(ident, backend, impl, dump_file, in_x, args, callback=callback)
+                        evalbar.update(1)
+                        evalbar.refresh()
+                        allbar.update(1)
+                        allbar.refresh()
+    finally:
+        compbar.unpause()
+        if args.execute:
+            evalbar.unpause()
+        allbar.close()
+        compbar.close()
+        if args.execute:
+            evalbar.close()
 
 def evaluate_generate(tile_strategy, tile_generator, op_args, args, callback):
     gen_size = args.trials if args.search == "random" else None
@@ -454,17 +464,15 @@ def evaluate_generate(tile_strategy, tile_generator, op_args, args, callback):
         if len(all_in_x) > args.trials:
             idxs = np.random.choice(np.arange(len(all_in_x)), size=args.trials, replace=False)
             all_in_x = all_in_x[idxs]
-    if args.jobs > 1:
-        evaluate_all_parallel(tile_strategy, tile_generator, all_in_x, op_args, args, callback)
-    else:
-        for idx, in_x in enumerate(tqdm(all_in_x, smoothing=0)):
-            evaluate_one_backends(idx, tile_strategy, op_args, in_x.tolist(), args, callback)
+    evaluate_all_parallel(tile_strategy, all_in_x, op_args, args, callback)
 
 def evaluate_data(tile_strategy, X, op_args, args, callback):
     size = len(X)
     logger.debug(f"Search space size: {size}")
-    for idx, in_x in enumerate(tqdm(X, smoothing=0)):
-        evaluate_one_backends(idx, scheduler, tile_strategy, op_args, in_x.tolist(), args, callback)
+    evaluate_all_parallel(tile_strategy, X, op_args, args, callback)
+
+def evaluate_one(tile_strategy, in_x, op_args, args, callback):
+    evaluate_all_parallel(tile_strategy, np.array([in_x]), op_args, args, callback)
 
 def read_input(fname, args):
     X = []
@@ -478,6 +486,8 @@ def read_input(fname, args):
     return np.array(X)
 
 def peak_time(args):
+    if not args.execute:
+        return 0
     return utils.cpu_peak_time(
         utils.mulall(args.dims),
         DTYPES_MAP[args.dtype],
@@ -512,24 +522,23 @@ def search_some(tile_strategy, tile_generator, op_args, args):
                           op_args, args,
                           callback=result_callback)
 
-def evaluate_one_backends(ident, tile_strategy, op_args, in_x, args, callback):
-    for backend in args.backends:
-        scheduler = OPERATORS[args.operator]["backends"][backend]["scheduler"]
-        backend_ident = f"{args.operator}_{backend}_{ident}"
-        evaluate_one(backend_ident, scheduler, tile_strategy, op_args, in_x, args, callback=callback)
-    
 def optimize(args):
     dims = args.dims
     dtype = args.dtype
     op_args = (*dims, dtype)
     tile_strategy = STRATEGIES[args.strategy]["strategy"]
+    for backend in args.backends:
+        OPERATORS[args.operator]["backends"][backend]["init"]()
     if args.test:
         ptime = peak_time(args)
+        all_results = []
         def output_one(results):
+            all_results.append(results)
+        evaluate_one(tile_strategy, args.test, op_args, args, callback=output_one)
+        for results in all_results:
             in_x, error, time, backend = results
             if error == 0:
-                logger.info(f"Schedule: {backend}: {in_x}: time: {time*1000:.2f} msecs, peak perf: {ptime/time*100:.2f}%")
-        evaluate_one_backends(0, tile_strategy, op_args, args.test, args, callback=output_one)
+                tqdm.write(f"Schedule: {backend}: {in_x}: time: {time*1000:.2f} msecs, peak perf: {ptime/time*100:.2f}%")
     else:
         tile_generator = STRATEGIES[args.strategy]["generator"]
         search_some(tile_strategy, tile_generator, op_args, args)
@@ -553,18 +562,17 @@ OPERATORS = {
         "outputs": [["i", "j"]],
         "backends": {
             "mlir": {
+                "init": mlir_init,
                 "operation": xdsl_matmul,
                 "scheduler": mlir_matmul_sched,
             },
-            "xdsl": {
-                "operation": xdsl_matmul,
-                "scheduler": xdsl_matmul_sched,
-            },
             "tvm": {
+                "init": tvm_init,
                 "operation": tvm_matmul,
                 "scheduler": tvm_matmul_sched,
             },
             "jir": {
+                "init": jir_init,
                 "operation": jir_matmul,
                 "scheduler": jir_matmul_sched,
             },
@@ -620,9 +628,10 @@ def main():
     parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
+    parser.add_argument("--max-unroll", type=int, default=1024, help="max unroll in tiling strategies")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--output", type=str, default="results.csv", help="output csv file for search")
-    parser.add_argument("--eval", type=str, choices=["jit", "exe", "eval"], default="eval", help="evaluation method")
+    parser.add_argument("--eval", type=str, choices=["eval"], default="eval", help="evaluation method")
     parser.add_argument("--repeat", type=int, default=5, help="evaluation repeat")
     parser.add_argument("--number", type=int, default=1, help="evaluation number")
     parser.add_argument("--min-repeat-ms", type=int, default=100, help="evaluation min repeat ms")
@@ -631,7 +640,9 @@ def main():
     parser.add_argument("--save-temps-dir", type=str, default="./save_temps_dir", help="save temps dir")
     parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
     parser.add_argument("--jobs", type=int, default=1, help="parallel compile jobs")
+    parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
+    parser.add_argument("--quiet", action=argparse.BooleanOptionalAction, help="quiet optionnal output and progress bar")
     parser.add_argument("--dump", action=argparse.BooleanOptionalAction, help="dump IR while generating")
     args = parser.parse_args()
 
@@ -649,8 +660,11 @@ def main():
 
     global THREADS
     THREADS = args.threads
+    global MAX_UNROLL
+    MAX_UNROLL = args.max_unroll
 
-    if args.eval == "eval":
+
+    if args.eval == "eval" and args.execute:
         args.eval_parameters = get_eval_parameters(args)
 
     # Hack to ensure that TVM backend is after MLIR backends,
