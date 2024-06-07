@@ -12,7 +12,11 @@ from xdsl.dialects.builtin import (
     f32,
     AffineMapAttr,
 )
-from xdsl.dialects.arith import Mulf,Addf
+from xdsl.dialects.arith import (
+    Mulf,
+    Addf,
+    FastMathFlagsAttr
+)
 from xdsl.ir.affine import AffineExpr, AffineMap
 from xdsl.utils.test_value import TestSSAValue
 from xdsl.ir import Attribute, Block, Region
@@ -47,10 +51,18 @@ def matmul_op():
     return matmul
 
 def matmul_generic_op():
-    
+
     block = Block(arg_types=(elt_type,elt_type,elt_type))
-    mulf = Mulf(block.args[0], block.args[1])
-    addf = Addf(block.args[2],mulf.results[0])
+    mulf = Mulf(
+        block.args[0],
+        block.args[1],
+        FastMathFlagsAttr("fast"),
+    )
+    addf = Addf(
+        block.args[2],
+        mulf.results[0],
+        FastMathFlagsAttr("fast"),
+    )
     block.add_ops([
         mulf,
         addf,
@@ -81,6 +93,7 @@ def matmul_generic_op():
             linalg.IteratorTypeAttr.reduction(),
         ),
     )
+    print(str(matmul))
 
     return matmul
 

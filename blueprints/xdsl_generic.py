@@ -1,3 +1,5 @@
+# {"fastmath" = #arith.fastmath<contract>}
+
 from xdsl.dialects import func,linalg
 from xdsl.dialects.builtin import (
     TensorType,
