@@ -1,4 +1,6 @@
-import os
+import os,sys
+
+sys.path.append('../')
 
 from MlirImplementer import MlirImplementer
 

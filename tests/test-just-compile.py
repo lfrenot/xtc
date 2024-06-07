@@ -1,10 +1,13 @@
 import os
 import sys
 
+sys.path.append('../')
+
 from PartialImplementer import PartialImplementer
 
 source_path = "/tmp/test.mlir" if len(sys.argv) <= 1 else sys.argv[1]
 payload_name = "payload0"
+vectors_size = 16
 
 home = os.environ.get("HOME","")
 
@@ -14,6 +17,7 @@ impl = PartialImplementer(
     mlir_install_dir=f"{home}/bin/llvm-xdsl",
     source_path = source_path,
     payload_name = payload_name,
+    vectors_size=16,
 )
 
 e = impl.compile(

@@ -1,18 +1,9 @@
 from setup_mlir_mm import mm1
 
 source_path = "/tmp/test.mlir"
+vectors_size = 16
 
 impl = mm1()
-
-e = impl.evaluate(
-    print_source_ir=False,
-    print_transformed_ir=False,
-    print_ir_after=[],
-    print_ir_before=[],
-    print_assembly=True,
-    color = True,
-    debug = False,
-)
 
 mlircode = impl.generate_without_compilation()
 f = open(source_path,'w')
@@ -28,6 +19,7 @@ impl = PartialImplementer(
     mlir_install_dir=f"{home}/bin/llvm-xdsl",
     source_path = source_path,
     payload_name = impl.payload_name,
+    vectors_size = vectors_size,
 )
 
 impl.compile(
@@ -35,7 +27,8 @@ impl.compile(
     print_transformed_ir=False,
     print_ir_after=[],
     print_ir_before=[],
-    print_assembly=True,
+    print_assembly=False,
     color = True,
     debug = False,
 )
+
