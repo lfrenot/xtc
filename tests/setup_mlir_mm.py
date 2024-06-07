@@ -35,7 +35,7 @@ def mm0():
         vectors_size = vectors_size
     )
     
-    return mm0
+    return impl
 
 def mm1():
 

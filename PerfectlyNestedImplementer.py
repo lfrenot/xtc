@@ -93,7 +93,6 @@ class PerfectlyNestedImplementer(AbsImplementer):
         # loops
         current_state = input_var
         tiling_instrs = []
-        vect_instrs = []
         loops = []
         for dim,dims_vector in dims_vectors.items():
             # Useless to materialize a loop which will be vectorized
@@ -113,9 +112,9 @@ class PerfectlyNestedImplementer(AbsImplementer):
             tiling_instrs += [new_instr + annot]
 
         # If no vectorial tile, we scalarize the linalg op just after tiling
-        if len(self.vectorization) == 0:
-            scalarized, scalarization = transform.get_scalarize(current_state)
-            current_state = scalarized
+        # if len(self.vectorization) == 0:
+        #     scalarized, scalarization = transform.get_scalarize(current_state)
+        #     current_state = scalarized
             
         # Obtain a handler for patterns application
         parent, parent_instr = transform.get_parent(loops[0])
@@ -125,33 +124,34 @@ class PerfectlyNestedImplementer(AbsImplementer):
         tiling_instrs += transform.tiling_apply_patterns(parent)
 
         # Produce the vectorization instructions
-        vectorized,vectorize = transform.get_vectorize_children(parent)
-        vect_instrs.append(vectorize)
-        pre_hoist = transform.vector_pre_hoist_apply_patterns(vectorized)
-        vect_instrs += pre_hoist
+        vect_instrs = []
+        vectorized = parent
+        if len(self.vectorization) > 0:
+            handler,vectorize = transform.get_vectorize_children(parent)
+            pre_hoist = transform.vector_pre_hoist_apply_patterns(handler)
+            hoisted0,get_hoist0 = transform.vector_hoist(handler)
+            vect_instrs = [vectorize] + pre_hoist + [get_hoist0]
 
-        hoisted0,get_hoist0 = transform.vector_hoist(vectorized)
-        
         # Produce the unrolling instructions using the annotations on loops
         unroll_instrs = []
         for dim,factor in self.unrolling.items():
             # loop,match_loop = transform.match_by_attribute(vectorized,dim)
-            loop,match_loop = transform.match_by_attribute(hoisted0,dim)
+            loop,match_loop = transform.match_by_attribute(vectorized,dim)
             unroll = transform.get_unroll(loop,factor)
             unroll_instrs += [match_loop,unroll]
 
-        hoisted,get_hoist = transform.vector_hoist(hoisted0)
-        # hoisted,get_hoist = transform.vector_hoist(vectorized)
-        get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
+        postprocess = []
+        if len(self.vectorization) > 0:
+            hoisted,get_hoist = transform.vector_hoist(vectorized)
+            get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
+            postprocess = get_hoist + get_lower
             
         lines = (
             [seq_sig,"{"]
             + tiling_instrs
             + vect_instrs
-            + [get_hoist0]
             + unroll_instrs
-            + [get_hoist]
-            + get_lower
+            + postprocess
             + [transform.get_terminator(),"}"]
         )
         return sym_name,"\n".join(lines)
