@@ -126,17 +126,11 @@ Comparative performance distribution on tile4dv tilings in `data/mlir_results.mm
     ./display-results.py --title "Tile4DV tiling strategy exhaustive for 256x256x512 vectorized matmul" data/results.mm06-tile4dv-all.csv:tvm:X:peak:tvm data/results.mm06-tile4dv-all.csv:mlir:X:peak:mlir data/results.mm06-tile4dv-all.csv:jir:X:peak:jir --output data/results.mm06-tile4dv-all.svg
 
 
-## Notes
+## TODO
 
-### Compile & link
-
-After compilation using Python:
-```
-~/bin/llvm-xdsl/bin/clang /tmp/dump.bc ~/bin/llvm-xdsl/lib/libmlir_c_runner_utils.so -o /tmp/test
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/hpompougnac/bin/llvm-xdsl/lib/
-/tmp/test
-```
-
-### Scalar FMAs
-
-The option ```--math-uplift-to-fma``` combines arith operations into ```math.fma``` if the flag ```fast``` is set, but how to generate the latter ?
+* Merge the different classes
+* Match the payload op with self.op\_id\_attribute insteaf of this complex thing
+  (which is not enough for linalg.generic)
+* Add new transformations
+* Handle multi-operations graphs (with fusion)
+* Integrate with PyTorch

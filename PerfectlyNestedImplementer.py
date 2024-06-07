@@ -3,6 +3,7 @@ import numpy as np
 from xdsl.ir import Operation
 from AbsImplementer import AbsImplementer
 import transform
+from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
 
 class PerfectlyNestedImplementer(AbsImplementer):
 
@@ -18,6 +19,7 @@ class PerfectlyNestedImplementer(AbsImplementer):
         super().__init__(mlir_install_dir,vectors_size)
         #
         self.source_op = source_op
+        self.source_op.attributes[self.op_id_attribute] = xdslUnitAttr()
         self.dims = dims
         self.parallel_dims = parallel_dims
         self.reduction_dims = reduction_dims
