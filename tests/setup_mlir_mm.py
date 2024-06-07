@@ -6,7 +6,7 @@ from MlirImplementer import MlirImplementer
 
 from xdsl.dialects import func,linalg
 from xdsl.dialects.builtin import TensorType,MemRefType,f32
-from xdsl.ir import Block
+from xdsl.utils.test_value import TestSSAValue
 
 home = os.environ.get("HOME","")
 
@@ -17,12 +17,12 @@ elt_type = f32
 vectors_size = 16
 
 def matmul_op():
-    operands_types = [MemRefType(elt_type,shape)
-                      for shape in [[i,k],[k,j],[i,j]]]
-    block0 = Block(arg_types=operands_types)
     matmul = linalg.MemRefMatmulOp(
-        inputs=(block0.args[0],block0.args[1]),
-        outputs = (block0.args[2],),
+        inputs = (
+            TestSSAValue(MemRefType(elt_type,(i,k))),
+            TestSSAValue(MemRefType(elt_type,(k,j))),
+        ),
+        outputs = (TestSSAValue(MemRefType(elt_type,(i,j))),),
     )
     return matmul
 
