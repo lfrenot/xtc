@@ -48,11 +48,19 @@ export PYTHONPATH=$PYTHONPATH:$HOME/bin/llvm-xdsl/python_packages/mlir_core
 pip install -r requirements.txt
 ```
 
+### TVM backend requirements
+
 For using tvm backend, install TVM and do (on pinocchio use for instance TVM installed in `/opt/local/tvm/tvm-v0.16.0.rc0/`):
 ```
 pip install -r tvm_requirements.txt
 export PYTHONPATH=$PYTHONPATH:/path_to_tvm/python
 ```
+
+Note that if compiling TVM version v0.16 from source, one should first
+apply the patch `patches/tvm-Bugfix-TIR-Fix-race-on-ComputationCache.patch`
+which fix a race condition in TVM.
+
+### JIR backend requirements
 
 For using jir backend, install JIR (ref to https://gitlab.inria/fr/jprotopo/jir.git) and set python path:
 ```
