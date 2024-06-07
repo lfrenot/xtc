@@ -24,6 +24,19 @@ matmul = linalg.MemRefMatmulOp(
     outputs = (block0.args[2],),
 )
 
+def mm0():
+    
+    impl = MlirImplementer(
+        mlir_install_dir=f"{home}/bin/llvm-xdsl",
+        source_op = matmul,
+        dims = {'i':i,'j':j,'k':k},
+        parallel_dims = ['i','j'],
+        reduction_dims = ['k'],
+        vectors_size = vectors_size
+    )
+    
+    return mm0
+
 def mm1():
 
     impl = MlirImplementer(

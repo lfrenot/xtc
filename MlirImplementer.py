@@ -28,6 +28,9 @@ from mlir.dialects import (
 )
 from xdsl.ir import Operation
 from xdsl.dialects.builtin import f32
+from xdsl.dialects.builtin import ArrayAttr as xdslArrayAttr
+from xdsl.dialects.builtin import DictionaryAttr as xdslDictionaryAttr
+from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
 
 from xdsl.ir import Block as xdslBlock
 from xdsl.ir import Region as xdslRegion
@@ -105,11 +108,14 @@ class MlirImplementer(PerfectlyNestedImplementer):
             value_mapper = value_mapper
         )
         payload.add_ops([new_op,xdslfunc.Return()])
-        payload_func = xdslfunc.FuncOp.from_region(
-            self.payload_name,
-            operands_types,
-            [],
-            xdslRegion(payload)
+        payload_func = xdslfunc.FuncOp(
+            name=self.payload_name,
+            function_type=(operands_types, ()),
+            region=xdslRegion(payload),
+            arg_attrs=xdslArrayAttr(param=[
+                xdslDictionaryAttr(data={ 'llvm.noalias': xdslUnitAttr() })
+                for _ in operands_types
+            ]),
         )
         return payload_func
     
