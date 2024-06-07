@@ -131,6 +131,7 @@ class PerfectlyNestedImplementer(AbsImplementer):
             pre_hoist = transform.vector_pre_hoist_apply_patterns(handler)
             hoisted0,get_hoist0 = transform.vector_hoist(handler)
             vect_instrs = [vectorize] + pre_hoist + [get_hoist0]
+            vectorized = hoisted0
 
         # Produce the unrolling instructions using the annotations on loops
         unroll_instrs = []
@@ -144,7 +145,7 @@ class PerfectlyNestedImplementer(AbsImplementer):
         if len(self.vectorization) > 0:
             hoisted,get_hoist = transform.vector_hoist(vectorized)
             get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
-            postprocess = get_hoist + get_lower
+            postprocess = [get_hoist] + get_lower
             
         lines = (
             [seq_sig,"{"]
