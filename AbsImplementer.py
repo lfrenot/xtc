@@ -188,7 +188,6 @@ class AbsImplementer(ABC):
     
     def mlir_compile(
             self,
-            code,
             print_source_ir,
             print_transformed_ir,
             color,
@@ -269,7 +268,6 @@ class AbsImplementer(ABC):
         str_module = self.glue()
             
         self.mlir_compile(
-            code = str_module,
             print_source_ir = print_source_ir,
             print_transformed_ir = print_transformed_ir,
             color = color,
@@ -278,9 +276,9 @@ class AbsImplementer(ABC):
         )
 
         # execution_engine = ExecutionEngine(
-        #     self.module,
+        #     module=self.module,
         #     opt_level=3,
-        #     shared_libs=self.shared_libs
+        # shared_libs=self.shared_libs
         # )
         # execution_engine.invoke("entry")
         
@@ -335,7 +333,6 @@ class AbsImplementer(ABC):
         source_ir = self.glue()
 
         self.mlir_compile(
-            code = source_ir,
             print_source_ir = print_source_ir,
             print_transformed_ir = print_transformed_ir,
             color = color,
