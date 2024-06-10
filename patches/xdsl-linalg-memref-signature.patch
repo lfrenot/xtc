@@ -1,5 +1,5 @@
 diff --git a/xdsl/dialects/linalg.py b/xdsl/dialects/linalg.py
-index 1c867b15..1c32d292 100644
+index 1c867b15..c5abd95d 100644
 --- a/xdsl/dialects/linalg.py
 +++ b/xdsl/dialects/linalg.py
 @@ -625,7 +625,7 @@ class MatmulOp(IRDLOperation):
@@ -30,8 +30,8 @@ index 1c867b15..1c32d292 100644
 +    outputs = var_operand_def(AnyShapedType())
 +
 +    assembly_format = (
-+        "`ins` `(` $inputs `:` type($inputs) `)` ` ` "
-+        "`outs` `(` $outputs `:` type($outputs) `)` ` ` attr-dict"
++        " ` ` attr-dict `ins` `(` $inputs `:` type($inputs) `)` ` ` "
++        "`outs` `(` $outputs `:` type($outputs) `)` "
 +    )
 +
 +    irdl_options = [AttrSizedOperandSegments(as_property=True), ParsePropInAttrDict()]
