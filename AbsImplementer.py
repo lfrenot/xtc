@@ -16,41 +16,37 @@ from xdsl.dialects.builtin import (
 from mlir.ir import *
 from mlir.dialects import (
     builtin,
-    func
+    func,
 )
+from mlir.dialects.transform import NamedSequenceOp
+from mlir.passmanager import *
 
 import transform
 
-transform_opt = "transform-interpreter"
-erase_schedule_opt = "test-transform-dialect-erase-schedule"
 transform_opts = [
-    f"--{transform_opt}",
-    "--func-bufferize",
-    "--canonicalize",
+    "transform-interpreter",
+    "canonicalize",
 ]
 
 lowering_opts = [
-    f"--{erase_schedule_opt}",
-    "--lower-affine",
-    "--convert-vector-to-scf",
-    "--convert-linalg-to-loops",
-    "--loop-invariant-code-motion",
-    "--buffer-loop-hoisting",
-    "--cse",
-    "--sccp",
-    "--canonicalize",
-    "--convert-scf-to-cf",
-    "--canonicalize",
-    "--cse",
-    "--convert-vector-to-llvm=enable-x86vector",
-    "--convert-math-to-llvm",
-    "--expand-strided-metadata",
-    "--lower-affine",
-    "--buffer-results-to-out-params",
-    "--finalize-memref-to-llvm",
-    "--convert-func-to-llvm=use-bare-ptr-memref-call-conv",
-    "--convert-index-to-llvm",
-    "--reconcile-unrealized-casts",
+    "lower-affine",
+    "convert-vector-to-scf",
+    "convert-linalg-to-loops",
+    "loop-invariant-code-motion",
+    "func.func(buffer-loop-hoisting)",
+    "cse",
+    "sccp",
+    "canonicalize",
+    "convert-scf-to-cf",
+    "convert-vector-to-llvm{enable-x86vector=true}",
+    "convert-math-to-llvm",
+    "expand-strided-metadata",
+    "lower-affine",
+    "buffer-results-to-out-params",
+    "finalize-memref-to-llvm",
+    "convert-func-to-llvm{use-bare-ptr-memref-call-conv=true}",
+    "convert-index-to-llvm",
+    "reconcile-unrealized-casts",
 ]
 
 mliropt_opts = transform_opts +  lowering_opts
@@ -162,24 +158,6 @@ class AbsImplementer(ABC):
         #
         self.cmds_history = []
 
-    def build_compile_extra_opts(
-            self,
-            print_source_ir,
-            print_transformed_ir,
-            print_ir_after,
-            print_ir_before,
-            color,
-    ):
-        compile_extra_opts = []
-        if print_source_ir:
-            zero_opt = mliropt_opts[0].replace('--','')
-            compile_extra_opts.append(f"--mlir-print-ir-before={zero_opt}")
-        if print_transformed_ir:
-            compile_extra_opts.append(f"--mlir-print-ir-after={erase_schedule_opt}")
-        compile_extra_opts += [f"--mlir-print-ir-after={p}" for p in print_ir_after]
-        compile_extra_opts += [f"--mlir-print-ir-before={p}" for p in print_ir_before]
-        return compile_extra_opts
-
     def build_disassemble_extra_opts(
             self,
             obj_file,
@@ -204,34 +182,42 @@ class AbsImplementer(ABC):
             ]
         return run_extra_opts
 
+    def dump_ir(self,title):
+        print(
+            f"// -----// {title} //----- //",
+            file=sys.stderr
+        )
+        print(str(self.module), file=sys.stderr)
+    
     def mlir_compile(
             self,
             code,
             print_source_ir,
             print_transformed_ir,
-            print_ir_after,
-            print_ir_before,
             color,
             debug,
             print_lowered_ir,
     ):
-        compile_extra_opts = self.build_compile_extra_opts(
-            print_source_ir = print_source_ir,
-            print_transformed_ir = print_transformed_ir,
-            print_ir_after = print_ir_after,
-            print_ir_before = print_ir_before,
-            color = color,
-        )
-        compile_cmd = self.cmd_mliropt + compile_extra_opts
-        module_llvm = self.execute_command(
-            cmd=compile_cmd,
-            input_pipe=code,
-            debug = debug
-        )
+        
+        if print_transformed_ir:
+            self.dump_ir("IR Dump Before transform")
+        pm = PassManager("builtin.module",context=self.ctx)
+        for opt in transform_opts:
+            pm.add(opt)
+        pm.run(self.module)
+        lop = [o for o in self.module.body.operations][-1]
+        assert(isinstance(lop,NamedSequenceOp))
+        lop.erase()
+        if print_transformed_ir:
+            self.dump_ir("IR Dump After transform")
+        #
+        pm = PassManager("builtin.module",context=self.ctx)
+        for opt in lowering_opts:
+            pm.add(opt)
+        pm.run(self.module)
+
         if print_lowered_ir:
-            print(f"// -----// IR Dump After MLIR Opt //----- //", file=sys.stderr)
-            print(module_llvm.stdout, file=sys.stderr)
-        return str(module_llvm.stdout)
+            self.dump_ir("IR Dump After MLIR Opt")
 
     def disassemble(self,obj_file,color,debug):
         disassemble_extra_opts = self.build_disassemble_extra_opts(
@@ -275,8 +261,6 @@ class AbsImplementer(ABC):
             self,
             print_source_ir = False,
             print_transformed_ir = False,
-            print_ir_after = [],
-            print_ir_before = [],
             print_assembly = False,
             color = True,
             dump_file = dump_file,
@@ -287,12 +271,10 @@ class AbsImplementer(ABC):
 
         str_module = self.glue()
             
-        str_module_llvm = self.mlir_compile(
+        self.mlir_compile(
             code = str_module,
             print_source_ir = print_source_ir,
             print_transformed_ir = print_transformed_ir,
-            print_ir_after = print_ir_after,
-            print_ir_before = print_ir_before,
             color = color,
             debug = debug,
             print_lowered_ir = print_lowered_ir,
@@ -306,7 +288,7 @@ class AbsImplementer(ABC):
         cmd_run = self.cmd_run_mlir + run_extra_opts
         result = self.execute_command(
             cmd=cmd_run,
-            input_pipe=str_module_llvm,
+            input_pipe=str(self.module),
             debug = debug
         )
 
@@ -323,16 +305,12 @@ class AbsImplementer(ABC):
             self,
             color = True,
     ):
-        str_module = self.glue()
-        mlir_process = self.execute_command(cmd=self.mliropt,input_pipe=str_module,debug=False)
-        return str(mlir_process.stdout)
+        return str(self.module)
     
     def compile(
             self,
             print_source_ir = False,
             print_transformed_ir = False,
-            print_ir_after = [],
-            print_ir_before = [],
             print_assembly = False,
             color = True,
             dump_file = dump_file,
@@ -352,12 +330,10 @@ class AbsImplementer(ABC):
 
         source_ir = self.glue()
 
-        str_module_llvm = self.mlir_compile(
+        self.mlir_compile(
             code = source_ir,
             print_source_ir = print_source_ir,
             print_transformed_ir = print_transformed_ir,
-            print_ir_after = print_ir_after,
-            print_ir_before = print_ir_before,
             color = color,
             debug = debug,
             print_lowered_ir = print_lowered_ir,
@@ -366,7 +342,7 @@ class AbsImplementer(ABC):
         translate_cmd = self.cmd_mlirtranslate + ['-o', ir_dump_file]
         llvmir_process = self.execute_command(
             cmd=translate_cmd,
-            input_pipe=str_module_llvm,
+            input_pipe=str(self.module),
             debug = debug
         )
 

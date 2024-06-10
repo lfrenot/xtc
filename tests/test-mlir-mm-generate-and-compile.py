@@ -25,8 +25,6 @@ impl = PartialImplementer(
 impl.compile(
     print_source_ir=False,
     print_transformed_ir=False,
-    print_ir_after=[],
-    print_ir_before=[],
     print_assembly=False,
     color = True,
     debug = False,
