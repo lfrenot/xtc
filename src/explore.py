@@ -207,15 +207,15 @@ def jir_matmul_impl(i, j, k, ftype, graph, args):
     # TODO: MLIR JIR install dirs
     jir_install_dir = f"{HOME}/bin/llvm-jir"
     geist_install_dir = f"{HOME}/bin/llvm-geist"
-    sched = JIRImplementer.Implementer(
+    impl = JIRImplementer.Implementer(
         source_op=node["op"],
         dims=node["dims"],
         jir_install_dir=jir_install_dir,
         geist_install_dir=geist_install_dir,
     )
-    compiler = sched
-    target = sched
-    return compiler, sched, target, node["op"], "jir"
+    compiler = impl
+    node_scheduler = impl.get_scheduler()
+    return compiler, node_scheduler, node_scheduler, node["op"], "jir"
 
 def tile_strategy_3d(impl, op_args, in_x):
     # TODO: generalize: no need to be matmul specific as soon as

@@ -1,7 +1,7 @@
 from JIROps import Operation
 
 __all__ = [
-    "JIRSchedulerAdaaptor",
+    "JIRSchedulerAdaptor",
 ]
 
 class JIRSchedulerAdaptor():
