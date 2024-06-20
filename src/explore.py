@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 def reference_matmul(a, b, c):
     np.matmul(a, b, out=c)
 
-def xdsl_matmul_graph(i, j, k, ftype):
+def xdsl_matmul_graph(i, j, k, ftype, name="matmul"):
     from xdsl.dialects import func, linalg, arith, builtin
     from xdsl.dialects.builtin import MemRefType, f32, f64, UnitAttr
     from xdsl.ir import Block, Region
@@ -88,7 +88,7 @@ def xdsl_matmul_graph(i, j, k, ftype):
     matmul.attributes["__xtc_id_matmul__"] = UnitAttr()
     region = Region([block])
     payload = func.FuncOp.from_region(
-        name="matmul",
+        name=name,
         input_types=ops_types,
         return_types=[],
         region=region,
@@ -156,12 +156,14 @@ def mlir_matmul_impl(i, j, k, ftype, graph, args):
     source_op = mlir_nodes["matmul"].source_op
     return compiler, scheduler, node_scheduler, source_op, "mlir"
 
-def tvm_matmul_graph(i, j, k, ftype):
+def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     # Note that mlir, tvm import order causes issues
     import tvm, tvm.te
     import TVMImplementer
     matmul = TVMImplementer.Operation(
-        TVMImplementer.Operators.matmul, (i, j, k, DTYPES_MAP[ftype])
+        TVMImplementer.Operators.matmul,
+        (i, j, k, DTYPES_MAP[ftype]),
+        name=name,
     )
     return {
         "nodes": {
@@ -186,10 +188,12 @@ def tvm_matmul_impl(i, j, k, ftype, graph, args):
     node_scheduler = impl.get_scheduler()
     return compiler, node_scheduler, node_scheduler, node["op"], "tvm"
 
-def jir_matmul_graph(i, j, k, ftype):
+def jir_matmul_graph(i, j, k, ftype, name="matmul"):
     import JIRImplementer
     matmul = JIRImplementer.Operation(
-        JIRImplementer.Operators.matmul, (i, j, k, DTYPES_MAP[ftype])
+        JIRImplementer.Operators.matmul,
+        (i, j, k, DTYPES_MAP[ftype]),
+        name=name,
     )
     return {
         "nodes": {
@@ -423,7 +427,7 @@ def compile_one_impls(ident, impls, tile_strategy, op_args, in_x, args, callback
         )
     return compiled
 
-def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, callback=None):
+def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, callback=None, dump_file=None):
     assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
     implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
@@ -431,7 +435,8 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
     assert backend_name == backend
     tile_strategy(node_scheduler, op_args, in_x)
     schedule = scheduler.implement()
-    dump_file = f"payload_{ident}"
+    if dump_file is None:
+        dump_file = f"payload_{ident}"
     compile_args = dict(
         schedule=schedule,
         shared_lib=True,
@@ -701,6 +706,19 @@ STRATEGIES = {
     },
 }
 
+def setup_args(args):
+    global THREADS
+    global MAX_UNROLL
+    THREADS = args.threads
+    MAX_UNROLL = args.max_unroll
+
+    if args.eval == "eval" and args.execute:
+        args.eval_parameters = get_eval_parameters(args)
+
+    # Hack to ensure that TVM backend is after MLIR backends,
+    # otherwise the import of tvm breaks the MLIR python bindings
+    args.backends = sorted(args.backends)
+
 def launch_child(argv, args):
     env = {}
     if "tvm" in args.backends:
@@ -763,18 +781,7 @@ def main():
         np.random.seed(args.seed)
         random.seed(args.seed)
 
-    global THREADS
-    THREADS = args.threads
-    global MAX_UNROLL
-    MAX_UNROLL = args.max_unroll
-
-
-    if args.eval == "eval" and args.execute:
-        args.eval_parameters = get_eval_parameters(args)
-
-    # Hack to ensure that TVM backend is after MLIR backends,
-    # otherwise the import of tvm breaks the MLIR python bindings
-    args.backends = sorted(args.backends)
+    setup_args(args)
 
     optimize(args)
 

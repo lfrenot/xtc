@@ -2,21 +2,22 @@ import numpy as np
 
 class Operation():
 
-    def __init__(self, operator: "Operator", args: tuple) -> None:
+    def __init__(self, operator: "Operator", args: tuple, name=None) -> None:
         self.operator = operator
         self.args = args
         self.dim_names = self.operator.dim_names()
         self.axes_names = self.operator.axes_names()
         self.args_names = self.operator.args_names()
+        self.name = self.operator.name if name is None else name
 
     def generate(self) -> tuple[str, str, str]:
-        return self.operator.generate_op(*self.args)
+        return self.operator.generate_op(*self.args, name=self.name)
 
         
 class Operator():
     name = "undef"
     @classmethod
-    def generate_op(cls, i, j, k, dtype):
+    def generate_op(cls, i, j, k, dtype, name=None):
         raise Exception("unimplemneted")
 
 class OperatorMatmul(Operator):
@@ -49,7 +50,8 @@ function %ENTRY
 """
 
     @classmethod
-    def generate_op(cls, i, j, k, dtype) -> tuple:
+    def generate_op(cls, i, j, k, dtype, name=None) -> tuple:
+        name = name if name is not None else cls.name
         entry = f"{cls.name}_{i}x{j}x{k}x{dtype}"
         op_entry = f"op_{entry}"
         op_entry_0 = f"op0_{entry}"
