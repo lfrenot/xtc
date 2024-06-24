@@ -97,13 +97,14 @@ class Implementer():
             vectors_size : int = 16,
             **kwargs,
     ) -> None:
+        self.payload_name = source_op.name
         self.source_op = source_op
         self.args = self.source_op.args
         self.jir_install_dir = jir_install_dir
         self.geist_install_dir = geist_install_dir
         self.dims = dims
         self.jir_dims = {k: v for k, v in zip(source_op.args_names[:len(dims)], source_op.args[:len(dims)])}
-        self.op_function, self.jir_function, self.payload_name = self.source_op.generate()
+        self.op_function, self.jir_function = self.source_op.generate()
         self._vectors_size = vectors_size
         self._jir_llvm_config = f"{jir_install_dir}/bin/llvm-config"
         self._target_triple = kwargs.get("target_triple") or get_host_target_triple(self._jir_llvm_config)
@@ -132,7 +133,7 @@ class Implementer():
         return ModuleOp([fn, *computations.function_declarations], attributes=module_attr)
 
     @classmethod
-    def _save_temp(cls, save_temps: bool, save_temps_dir: Optional[str], fname: str, content: str) -> None:
+    def _save_temp(cls, save_temps: bool, save_temps_dir: str, fname: str, content: str) -> None:
         if not save_temps:
             return
         os.makedirs(save_temps_dir, exist_ok=True)
@@ -154,19 +155,21 @@ class Implementer():
 
     def _compile_jir_module(self, schedule: Schedule, dump_file: str, **kwargs) -> Any:
         save_temps = kwargs.get("save_temps", False)
-        save_temps_dir = kwargs.get("save_temps_dir") or "./save_temps_dir"
+        save_temps_dir = kwargs.get("save_temps_dir", "./save_temps_dir")
         save_temp = partial(self._save_temp, save_temps, save_temps_dir)
-        save_temp(f"{dump_file}.jir", str(self.jir_function))
+        dump_base = os.path.basename(dump_file)
+
+        save_temp(f"{dump_base}.jir", str(self.jir_function))
         transform_cmds, transform_dims = schedule.get_schedule_impl()
         transform_dims_str = "".join([f"{k}={v}\n" for k, v in transform_dims.items()])
         transform_cmds_str = "".join([f"{t};\n" for t in transform_cmds])
-        save_temp(f"{dump_file}.dims", transform_dims_str)
-        save_temp(f"{dump_file}.tjir", transform_cmds_str)
+        save_temp(f"{dump_base}.dims", transform_dims_str)
+        save_temp(f"{dump_base}.tjir", transform_cmds_str)
         transformed_function_op = self._transform_function(
             self._jir_function_op,
             transform_cmds_str,
             transform_dims)
-        save_temp(f"{dump_file}.transformed.jir", str(transformed_function_op))
+        save_temp(f"{dump_base}.transformed.jir", str(transformed_function_op))
         index = JIRFunctionDimensionIndex()
         ctx = JIRFunctionContext(transformed_function_op)
         index(transformed_function_op)
@@ -175,7 +178,7 @@ class Implementer():
         if not ctx.well_defined:
             raise RuntimeError("Some ctx dimensions are missing")
         module = self._generate_module_for(ctx)
-        save_temp(f"{dump_file}.module.mlir", str(module))
+        save_temp(f"{dump_base}.module.mlir", str(module))
         return module
 
     def compile(
@@ -193,6 +196,8 @@ class Implementer():
         save_temps = kwargs.get("save_temps", False)
         save_temps_dir = kwargs.get("save_temps_dir") or "./save_temps_dir"
         save_temp = partial(self._save_temp, save_temps, save_temps_dir)
+        dump_base = os.path.basename(dump_file)
+
         mlir_lowering = MLIRLowering(f"{self.jir_install_dir}/bin/mlir-opt")
         mlir2llvm = MLIR2LLVMConversion(f"{self.jir_install_dir}/bin/mlir-translate")
         llvm_compiler = LLVMSharedLibraryCompiler(
@@ -202,15 +207,15 @@ class Implementer():
             self._target_arch,
         )
         module = self._compile_jir_module(schedule, dump_file=dump_file, **kwargs)
-        save_temp(f"{dump_file}.polygeist.c", self.op_function)
+        save_temp(f"{dump_base}.polygeist.c", self.op_function)
         computation_primitives = self._op_function_mlir
-        save_temp(f"{dump_file}.op.mlir", str(computation_primitives))
+        save_temp(f"{dump_base}.op.mlir", str(computation_primitives))
         computation_module = str(merge_mlir_modules_by_content(str(module), str(computation_primitives)))
-        save_temp(f"{dump_file}.merged.mlir", computation_module)
+        save_temp(f"{dump_base}.merged.mlir", computation_module)
         lowered_computation_module = mlir_lowering(computation_module)
-        save_temp(f"{dump_file}.lowered.mlir", computation_module)
+        save_temp(f"{dump_base}.lowered.mlir", computation_module)
         llvm_computation_module = mlir2llvm(lowered_computation_module)
-        save_temp(f"{dump_file}.lowered.ll", computation_module)
+        save_temp(f"{dump_base}.lowered.ll", computation_module)
         compiled_computation_module = llvm_compiler(llvm_computation_module)
         if dump_file is not None:
             library_path = f"{dump_file}.so"
