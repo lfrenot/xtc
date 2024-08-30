@@ -9,6 +9,7 @@ from mlir.ir import (
     InsertionPoint,
     Context,
     Location,
+    IntegerType,
     F32Type,
     F64Type,
     MemRefType,
@@ -62,10 +63,7 @@ class MlirImplementer(AbsImplementer):
         #
         self.source_op = source_op
         self.source_op.attributes[self.op_id_attribute] = xdslUnitAttr()
-        if str(source_op.operands[0].type.get_element_type()) == 'f32':
-            self.elt_type = F32Type.get(context = self.ctx)
-        else:
-            assert(False)
+
         self.inputs_types = [MemRefType.parse(str(i.type),context=self.ctx)
                              for i in self.source_op.inputs]
         self.outputs_types = [MemRefType.parse(str(i.type), context=self.ctx)
@@ -210,8 +208,9 @@ class MlirImplementer(AbsImplementer):
         entry_block = mlir_func.regions[0].blocks[0]
         outputs = entry_block.arguments[len(self.source_op.inputs):]
         with InsertionPoint.at_block_begin(entry_block), self.loc as loc:
-            scal = arith.ConstantOp(self.elt_type,0.0)
-            for o in outputs:
+            for o,oty in zip(outputs,self.outputs_types):
+                v = 0 if IntegerType.isinstance(oty.element_type) else 0.0
+                scal = arith.ConstantOp(oty.element_type,v)
                 linalg.fill(scal,outs=[o])
 
         ip = InsertionPoint.at_block_begin(self.module.body)
@@ -230,7 +229,8 @@ class MlirImplementer(AbsImplementer):
         with InsertionPoint(fmain.add_entry_block()), self.loc as loc:
             inputs = []
             for ity in self.inputs_types:
-                scal = arith.ConstantOp(self.elt_type,numpy.random.random())
+                v = int(numpy.random.random()) if IntegerType.isinstance(ity.element_type) else numpy.random.random()
+                scal = arith.ConstantOp(ity.element_type,v)
                 mem = memref.AllocOp(ity, [], [])
                 linalg.fill(scal,outs=[mem])
                 inputs.append(mem)
