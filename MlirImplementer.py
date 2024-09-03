@@ -253,23 +253,9 @@ class MlirImplementer(AbsImplementer):
             func.ReturnOp([],loc=self.loc)
         
         return fmain
+    
+    def materialize_schedule(self,input_var,vectors_size):
 
-    def materialize_schedule(self,vectors_size):
-
-        sym_name,input_var,seq_sig = transform.get_seq_signature(
-            sym_name="@__transform_main"
-        )
-
-        fills_opt = []
-        # fills,match_fills = transform.match_by_op_name(input_var,"linalg.fill")
-        # fills_tiled,tile_loop,tile_fills = transform.produce_tiling_instr(
-        #     fills,
-        #     [1,vectors_size]
-        # )
-        # fills_opt = [match_fills, tile_fills]
-        # vectorize_fills = transform.get_vectorize(fills_tiled)
-        # fills_opt += [vectorize_fills]
-        
         matched,match_attr = transform.match_by_attribute(
             input_var,
             self.op_id_attribute
@@ -352,17 +338,39 @@ class MlirImplementer(AbsImplementer):
             postprocess = [get_hoist] + get_lower
             
         lines = (
-            [seq_sig,"{"]
-            + fills_opt
-            + [match_attr]
+            [match_attr]
             + tiling_instrs
             + vect_instrs
             + unroll_instrs
             + postprocess
+        )
+        return lines
+
+    def integrate_schedule(self,vectors_size):
+        sym_name,input_var,seq_sig = transform.get_seq_signature(
+            sym_name="@__transform_main"
+        )
+
+        fills_opt = []
+        # fills,match_fills = transform.match_by_op_name(input_var,"linalg.fill")
+        # fills_tiled,tile_loop,tile_fills = transform.produce_tiling_instr(
+        #     fills,
+        #     [1,vectors_size]
+        # )
+        # fills_opt = [match_fills, tile_fills]
+        # vectorize_fills = transform.get_vectorize(fills_tiled)
+        # fills_opt += [vectorize_fills]
+
+        schedule = self.materialize_schedule(input_var,vectors_size)
+        integrated_schedule = (
+            [seq_sig,"{"]
+            + fills_opt
+            + schedule
             + [transform.get_terminator(),"}"]
         )
-        return sym_name,"\n".join(lines)
-
+        return sym_name,"\n".join(integrated_schedule)
+        
+        
     @classmethod
     def _np_types_spec(cls, types):
         types_map = {"f32": "float32", "f64": "float64"}
