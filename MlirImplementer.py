@@ -253,8 +253,27 @@ class MlirImplementer(AbsImplementer):
             func.ReturnOp([],loc=self.loc)
         
         return fmain
+
+    def integrate_schedules(mlir_impls):
+        myvar = transform.get_new_var()
+        sym_name,input_var,seq_sig = transform.get_seq_signature(
+            input_var = myvar,
+            sym_name="@__transform_main"
+        )
+        schedules = []
+        for impl in mlir_impls:
+            schedules += impl.materialize_schedule(input_var=myvar)
+        integrated_schedules = (
+            [seq_sig,"{"]
+            + schedules
+            + [transform.get_terminator(),"}"]
+        )
+        return sym_name,"\n".join(integrated_schedules)
+
+    def integrate_schedule(self):
+        return MlirImplementer.integrate_schedules([self])
     
-    def materialize_schedule(self,input_var,vectors_size):
+    def materialize_schedule(self,input_var):
 
         matched,match_attr = transform.match_by_attribute(
             input_var,
