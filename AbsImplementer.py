@@ -123,6 +123,7 @@ class AbsImplementer(ABC):
         self.ext_rtclock = self.build_rtclock()
         self.ext_printF64 = self.build_printF64()
         self.payload_name = None
+        self.integrated = False
         #
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
         self.shared_path = list(dict.fromkeys([f"-Wl,--rpath={os.path.dirname(lib)}" for lib in self.shared_libs]))
@@ -137,6 +138,10 @@ class AbsImplementer(ABC):
         #
         self.cmds_history = []
 
+    def integrate_with_guard(self):
+        if not self.integrated:
+            self.integrate()
+        
     def build_disassemble_extra_opts(
             self,
             obj_file,
@@ -253,7 +258,7 @@ class AbsImplementer(ABC):
     ):
         exe_dump_file = f"{dump_file}.o"
 
-        str_module = self.integrate()
+        self.integrate_with_guard()
 
         self.mlir_compile(
             print_source_ir = print_source_ir,
@@ -318,7 +323,7 @@ class AbsImplementer(ABC):
         exe_c_file = f"{dump_file}.main.c"
         exe_dump_file = f"{dump_file}.out"
 
-        source_ir = self.integrate()
+        self.integrate_with_guard()
 
         self.mlir_compile(
             print_source_ir = print_source_ir,
