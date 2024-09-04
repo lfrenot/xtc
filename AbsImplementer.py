@@ -120,6 +120,8 @@ class AbsImplementer(ABC):
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp(loc = self.loc)
         self.module.operation.attributes["transform.with_named_sequence"] = UnitAttr.get(context=self.ctx)
+        self.ext_rtclock = self.build_rtclock()
+        self.ext_printF64 = self.build_printF64()
         self.payload_name = None
         #
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
@@ -251,7 +253,7 @@ class AbsImplementer(ABC):
     ):
         exe_dump_file = f"{dump_file}.o"
 
-        str_module = self.glue()
+        str_module = self.integrate()
 
         self.mlir_compile(
             print_source_ir = print_source_ir,
@@ -316,7 +318,7 @@ class AbsImplementer(ABC):
         exe_c_file = f"{dump_file}.main.c"
         exe_dump_file = f"{dump_file}.out"
 
-        source_ir = self.glue()
+        source_ir = self.integrate()
 
         self.mlir_compile(
             print_source_ir = print_source_ir,
@@ -479,33 +481,32 @@ class AbsImplementer(ABC):
             results = eval_func(*parameters[0], *parameters[1])
         return np.array(results), 0, ""
 
-    def glue(self):
-        
-        # Generate the payload
-        ext_rtclock = self.build_rtclock()
-        ext_printF64 = self.build_printF64()
-        payload_func = self.payload()
-        main_func = self.main(ext_rtclock,ext_printF64,payload_func)
-        
-        # Generate the schedule
-        sched_sym_name,trans_script = self.integrate_schedule()
-        
-        trans_script = (
-            "module attributes {transform.with_named_sequence} {"
-            + "\n"
-            + trans_script
-            + "\n"
-            + "}"
-        )
-        trans_match = Module.parse(trans_script,context=self.ctx)
-        with InsertionPoint(self.module.body):
-            for o in trans_match.body.operations:
-                o.operation.clone()
+    def build_rtclock(self):
+        f64 = F64Type.get(context = self.ctx)
+        with InsertionPoint.at_block_begin(self.module.body):
+            frtclock = func.FuncOp(
+                name="rtclock",
+                type=FunctionType.get(
+                    inputs=[], results=[f64]
+                ),
+                visibility="private",
+                loc = self.loc,
+            )
+        return frtclock
 
-        # Glue
-        str_glued = str(self.module)
-        return str_glued
-
+    def build_printF64(self):
+        f64 = F64Type.get(context = self.ctx)
+        with InsertionPoint.at_block_begin(self.module.body):
+            fprint = func.FuncOp(
+                name="printF64",
+                type=FunctionType.get(
+                    inputs=[f64], results=[]
+                ),
+                visibility="private",
+                loc = self.loc,
+            )
+        return fprint
+    
     @abstractmethod
     def np_inputs_spec(self):
         pass
@@ -519,25 +520,5 @@ class AbsImplementer(ABC):
         pass
 
     @abstractmethod
-    def payload(self):
-        pass
-
-    @abstractmethod
-    def materialize_schedule(self,input_var):
-        pass
-
-    @abstractmethod
-    def integrate_schedule(self):
-        pass
-
-    @abstractmethod
-    def main(self):
-        pass
-
-    @abstractmethod
-    def build_rtclock(self):
-        pass
-
-    @abstractmethod
-    def build_printF64(self):
+    def integrate(self):
         pass

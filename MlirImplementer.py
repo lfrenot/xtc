@@ -68,6 +68,9 @@ class MlirImplementer(AbsImplementer):
                              for i in self.source_op.inputs]
         self.outputs_types = [MemRefType.parse(str(i.type), context=self.ctx)
                               for i in self.source_op.outputs]
+        # Generate the payload
+        payload_func = self.payload()
+        self.main(payload_func)
         #
         self.dims = dims
         self.parallel_dims = parallel_dims
@@ -152,31 +155,7 @@ class MlirImplementer(AbsImplementer):
             self.vectorization.append(nv)
             self.unrolling.pop(nv)
         
-    def build_rtclock(self):
-        f64 = F64Type.get(context = self.ctx)
-        with InsertionPoint.at_block_begin(self.module.body):
-            frtclock = func.FuncOp(
-                name="rtclock",
-                type=FunctionType.get(
-                    inputs=[], results=[f64]
-                ),
-                visibility="private",
-                loc = self.loc,
-            )
-        return frtclock
-
-    def build_printF64(self):
-        f64 = F64Type.get(context = self.ctx)
-        with InsertionPoint.at_block_begin(self.module.body):
-            fprint = func.FuncOp(
-                name="printF64",
-                type=FunctionType.get(
-                    inputs=[f64], results=[]
-                ),
-                visibility="private",
-                loc = self.loc,
-            )
-        return fprint
+    
 
     def xdsl_operator_to_function(self):
         # Fetch data
@@ -205,20 +184,12 @@ class MlirImplementer(AbsImplementer):
     def payload(self):
         xdsl_func = self.xdsl_operator_to_function()
         mlir_func = func.FuncOp.parse(str(xdsl_func),context = self.ctx)
-        entry_block = mlir_func.regions[0].blocks[0]
-        outputs = entry_block.arguments[len(self.source_op.inputs):]
-        with InsertionPoint.at_block_begin(entry_block), self.loc as loc:
-            for o,oty in zip(outputs,self.outputs_types):
-                v = 0 if IntegerType.isinstance(oty.element_type) else 0.0
-                scal = arith.ConstantOp(oty.element_type,v)
-                linalg.fill(scal,outs=[o])
-
         ip = InsertionPoint.at_block_begin(self.module.body)
         ip.insert(mlir_func)
         
         return mlir_func
         
-    def main(self,frtclock,fprint,fmatmul):
+    def main(self,fmatmul):
         #
         with InsertionPoint.at_block_begin(self.module.body):
             fmain = func.FuncOp(
@@ -229,23 +200,29 @@ class MlirImplementer(AbsImplementer):
         with InsertionPoint(fmain.add_entry_block()), self.loc as loc:
             inputs = []
             for ity in self.inputs_types:
-                v = int(numpy.random.random()) if IntegerType.isinstance(ity.element_type) else numpy.random.random()
+                if IntegerType.isinstance(ity.element_type):
+                    v = int(numpy.random.random())
+                else:
+                    v = numpy.random.random()
                 scal = arith.ConstantOp(ity.element_type,v)
                 mem = memref.AllocOp(ity, [], [])
                 linalg.fill(scal,outs=[mem])
                 inputs.append(mem)
             #
-            callrtclock1 = func.CallOp(frtclock,[],loc=self.loc)
+            callrtclock1 = func.CallOp(self.ext_rtclock,[],loc=self.loc)
 
             for oty in self.outputs_types:
+                v = 0 if IntegerType.isinstance(oty.element_type) else 0.0
+                scal = arith.ConstantOp(oty.element_type,v)
                 mem = memref.AllocOp(oty, [], [])
+                linalg.fill(scal,outs=[mem])
                 inputs.append(mem)
             
             func.CallOp(fmatmul, inputs,loc=self.loc)
-            callrtclock2 = func.CallOp(frtclock,[],loc=self.loc)
+            callrtclock2 = func.CallOp(self.ext_rtclock,[],loc=self.loc)
             
             time = arith.SubFOp(callrtclock2,callrtclock1,loc=self.loc)
-            func.CallOp(fprint,[time],loc=self.loc)
+            func.CallOp(self.ext_printF64,[time],loc=self.loc)
 
             for i in inputs:
                 memref.DeallocOp(i)
@@ -254,11 +231,11 @@ class MlirImplementer(AbsImplementer):
         
         return fmain
 
-    def integrate_schedules(mlir_impls):
+    def pack_schedules(mlir_impls,sym_name):
         myvar = transform.get_new_var()
         sym_name,input_var,seq_sig = transform.get_seq_signature(
             input_var = myvar,
-            sym_name="@__transform_main"
+            sym_name=sym_name
         )
         schedules = []
         for impl in mlir_impls:
@@ -268,10 +245,30 @@ class MlirImplementer(AbsImplementer):
             + schedules
             + [transform.get_terminator(),"}"]
         )
-        return sym_name,"\n".join(integrated_schedules)
+        trans_script = (
+            "module attributes {transform.with_named_sequence} {"
+            + "\n"
+            + "\n".join(integrated_schedules)
+            + "\n"
+            + "}"
+        )
+        return trans_script
 
-    def integrate_schedule(self):
-        return MlirImplementer.integrate_schedules([self])
+    def integrate(self):
+        
+        # Generate the transform script
+        trans_script =  MlirImplementer.pack_schedules(
+            [self],
+            sym_name="@__transform_main"
+        )
+        trans_match = Module.parse(trans_script,context=self.ctx)
+        with InsertionPoint(self.module.body):
+            for o in trans_match.body.operations:
+                o.operation.clone()
+
+        # Glue
+        str_glued = str(self.module)
+        return str_glued
     
     def materialize_schedule(self,input_var):
 
