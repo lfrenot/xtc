@@ -23,6 +23,7 @@ from mlir.passmanager import *
 from mlir.execution_engine import *
 
 import transform
+import mlir_packing
 
 transform_opts = [
     "transform-interpreter",
@@ -119,9 +120,7 @@ class AbsImplementer(ABC):
         self.ctx = Context()
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp(loc = self.loc)
-        self.module.operation.attributes["transform.with_named_sequence"] = UnitAttr.get(context=self.ctx)
-        self.ext_rtclock = self.build_rtclock()
-        self.ext_printF64 = self.build_printF64()
+        
         self.payload_name = None
         self.integrated = False
         #
@@ -485,32 +484,6 @@ class AbsImplementer(ABC):
             eval_func = Evaluator(func, repeat=repeat, min_repeat_ms=min_repeat_ms, number=number)
             results = eval_func(*parameters[0], *parameters[1])
         return np.array(results), 0, ""
-
-    def build_rtclock(self):
-        f64 = F64Type.get(context = self.ctx)
-        with InsertionPoint.at_block_begin(self.module.body):
-            frtclock = func.FuncOp(
-                name="rtclock",
-                type=FunctionType.get(
-                    inputs=[], results=[f64]
-                ),
-                visibility="private",
-                loc = self.loc,
-            )
-        return frtclock
-
-    def build_printF64(self):
-        f64 = F64Type.get(context = self.ctx)
-        with InsertionPoint.at_block_begin(self.module.body):
-            fprint = func.FuncOp(
-                name="printF64",
-                type=FunctionType.get(
-                    inputs=[f64], results=[]
-                ),
-                visibility="private",
-                loc = self.loc,
-            )
-        return fprint
     
     @abstractmethod
     def np_inputs_spec(self):

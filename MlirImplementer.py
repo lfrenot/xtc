@@ -38,6 +38,7 @@ from xdsl.dialects import func as xdslfunc
 
 from AbsImplementer import AbsImplementer
 import transform
+import mlir_packing
 
 class MlirImplementer(AbsImplementer):
 
@@ -56,6 +57,9 @@ class MlirImplementer(AbsImplementer):
 
         super().__init__(mlir_install_dir,vectors_size)
         #
+        self.ext_rtclock = mlir_packing.insert_rtclock(self.module,self.ctx,self.loc)
+        self.ext_printF64 = mlir_packing.insert_printF64(self.module,self.ctx,self.loc)
+        #
         self.payload_name = payload_name if payload_name else f"payload{MlirImplementer.count}"
         self.init_payload_name = f"init_{self.payload_name}"
         self.op_id_attribute = f"id{MlirImplementer.count}"
@@ -69,7 +73,10 @@ class MlirImplementer(AbsImplementer):
         self.outputs_types = [MemRefType.parse(str(i.type), context=self.ctx)
                               for i in self.source_op.outputs]
         # Generate the payload
-        payload_func = self.payload()
+        xdsl_func = self.xdsl_operator_to_function()
+        payload_func = func.FuncOp.parse(str(xdsl_func),context = self.ctx)
+        ip = InsertionPoint.at_block_begin(self.module.body)
+        ip.insert(payload_func)
         self.main(payload_func)
         #
         self.dims = dims
@@ -81,6 +88,7 @@ class MlirImplementer(AbsImplementer):
         self.vectorization = []
         self.parallelization = []
         self.unrolling = dict([])
+        #
 
     def loops(self):
         loops = dict()
@@ -182,10 +190,7 @@ class MlirImplementer(AbsImplementer):
         return payload_func
     
     def payload(self):
-        xdsl_func = self.xdsl_operator_to_function()
-        mlir_func = func.FuncOp.parse(str(xdsl_func),context = self.ctx)
-        ip = InsertionPoint.at_block_begin(self.module.body)
-        ip.insert(mlir_func)
+        
         
         return mlir_func
         
@@ -231,41 +236,9 @@ class MlirImplementer(AbsImplementer):
         
         return fmain
 
-    def pack_schedules(mlir_impls,sym_name):
-        myvar = transform.get_new_var()
-        sym_name,input_var,seq_sig = transform.get_seq_signature(
-            input_var = myvar,
-            sym_name=sym_name
-        )
-        schedules = []
-        for impl in mlir_impls:
-            schedules += impl.materialize_schedule(input_var=myvar)
-        integrated_schedules = (
-            [seq_sig,"{"]
-            + schedules
-            + [transform.get_terminator(),"}"]
-        )
-        trans_script = (
-            "module attributes {transform.with_named_sequence} {"
-            + "\n"
-            + "\n".join(integrated_schedules)
-            + "\n"
-            + "}"
-        )
-        return trans_script
-
     def integrate(self):
-
         assert(not self.integrated)
-        # Generate the transform script
-        trans_script =  MlirImplementer.pack_schedules(
-            [self],
-            sym_name="@__transform_main"
-        )
-        trans_match = Module.parse(trans_script,context=self.ctx)
-        with InsertionPoint(self.module.body):
-            for o in trans_match.body.operations:
-                o.operation.clone()
+        mlir_packing.integrate([self],self.module,self.ctx)
         self.integrated = True
     
     def materialize_schedule(self,input_var):
@@ -359,9 +332,6 @@ class MlirImplementer(AbsImplementer):
             + postprocess
         )
         return lines
-
-    
-        
         
     @classmethod
     def _np_types_spec(cls, types):
