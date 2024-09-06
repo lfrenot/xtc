@@ -104,9 +104,32 @@ fun = func.FuncOp.from_region(
     Region(fun_block)
 )
 
-print(str(fun))
+fill_impl = MlirImplementer(
+    mlir_install_dir=f"{home}/bin/llvm-xdsl",
+    source_op = linalg_fill,
+    dims = {'i':i,'j':j},
+    parallel_dims = ['i','j'],
+    reduction_dims = [],
+    vectors_size = vectors_size
+)
 
-impl = MlirImplementer(
+fill_impl.tile("i",{'i1':4})
+fill_impl.tile("j",{'j1':64})
+fill_impl.interchange(['i','j','i1','j1'])
+fill_impl.vectorize(['j1'])
+fill_impl.parallelize(['i'])
+fill_impl.unroll({'i1':4})
+
+# e = fill_impl.compile(
+#     print_source_ir=True,
+#     print_transformed_ir=False,
+#     print_lowered_ir = False,
+#     print_assembly=False,
+#     color = True,
+#     debug = False,
+# )
+
+matmul_impl = MlirImplementer(
     mlir_install_dir=f"{home}/bin/llvm-xdsl",
     source_op = linalg_matmul,
     dims = {'i':i,'j':j,'k':k},
@@ -115,24 +138,24 @@ impl = MlirImplementer(
     vectors_size = vectors_size
 )
 
-impl.tile("i",{'i1':4})
-impl.tile("j",{'j1':64})
-impl.tile("k",{'k1':8})
-impl.interchange(['i','j','k','k1','i1','j1'])
-impl.vectorize(['j1'])
-impl.parallelize(['i'])
-impl.unroll({'i1':4,'k1':8})
+matmul_impl.tile("i",{'i1':4})
+matmul_impl.tile("j",{'j1':64})
+matmul_impl.tile("k",{'k1':8})
+matmul_impl.interchange(['i','j','k','k1','i1','j1'])
+matmul_impl.vectorize(['j1'])
+matmul_impl.parallelize(['i'])
+matmul_impl.unroll({'i1':4,'k1':8})
 
 impl_graph = MlirGraphImplementer(
     mlir_install_dir=f"{home}/bin/llvm-xdsl",
     vectors_size = vectors_size,
     graph = fun,
-    mlir_impls = [impl],
+    mlir_impls = [fill_impl,matmul_impl],
 )
 
 e = impl_graph.compile(
-    print_source_ir=True,
-    print_transformed_ir=False,
+    print_source_ir=False,
+    print_transformed_ir=True,
     print_lowered_ir = False,
     print_assembly=False,
     color = True,

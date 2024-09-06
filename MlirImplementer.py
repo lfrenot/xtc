@@ -26,11 +26,17 @@ from mlir.dialects import (
     bufferization,
     memref
 )
+from xdsl.utils.hints import isa
 from xdsl.ir import Operation
-from xdsl.dialects.builtin import f32
+from xdsl.dialects.builtin import f32,IntegerType as xdslIntegerType
 from xdsl.dialects.builtin import ArrayAttr as xdslArrayAttr
 from xdsl.dialects.builtin import DictionaryAttr as xdslDictionaryAttr
 from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
+from xdsl.dialects.builtin import FloatAttr as xdslFloatAttr
+from xdsl.dialects.builtin import AnyIntegerAttr as xdslAnyIntegerAttr
+from xdsl.dialects.builtin import AnyShapedType as xdslAnyShapedType
+from xdsl.dialects.builtin import AnyMemRefType as xdslAnyMemRefType
+from xdsl.dialects.arith import Constant as xdslConstant
 
 from xdsl.ir import Block as xdslBlock
 from xdsl.ir import Region as xdslRegion
@@ -68,10 +74,17 @@ class MlirImplementer(AbsImplementer):
         self.source_op = source_op
         self.source_op.attributes[self.op_id_attribute] = xdslUnitAttr()
 
-        self.inputs_types = [MemRefType.parse(str(i.type),context=self.ctx)
-                             for i in self.source_op.inputs]
-        self.outputs_types = [MemRefType.parse(str(i.type), context=self.ctx)
-                              for i in self.source_op.outputs]
+        # Parse shaped (no scalar) inputs and outputs
+        self.inputs_types = []
+        for i in self.source_op.inputs:
+            if isa(i.type,xdslAnyMemRefType):
+                mlirI = MemRefType.parse(str(i.type),context=self.ctx)
+                self.inputs_types.append(mlirI)
+        self.outputs_types = []
+        for o in self.source_op.outputs:
+            if isa(o.type,xdslAnyMemRefType):
+                mlirO = MemRefType.parse(str(o.type),context=self.ctx)
+                self.outputs_types.append(mlirO)
         # Generate the payload
         xdsl_func = self.xdsl_operator_to_function()
         payload_func = func.FuncOp.parse(str(xdsl_func),context = self.ctx)
@@ -168,10 +181,31 @@ class MlirImplementer(AbsImplementer):
     def xdsl_operator_to_function(self):
         # Fetch data
         operands = self.source_op.operands
-        operands_types = [o.type for o in operands]
+        shaped_types,scalar_types = [],[]
+        for o in operands:
+            if isa(o.type,xdslAnyMemRefType):
+                shaped_types.append(o.type)
+            else:
+                scalar_types.append(o.type)
+            
         #
-        payload = xdslBlock(arg_types=operands_types)
-        concrete_operands = list(payload.args)
+        payload = xdslBlock(arg_types=shaped_types)
+        concrete_operands = []
+        shaped_count,scalar_count = 0,0
+        for o in operands:
+            if isa(o.type,xdslAnyMemRefType):
+                concrete_operands.append(payload.args[shaped_count])
+                shaped_count += 1
+            else:
+                if isa(o.type,xdslIntegerType):
+                    attr = xdslAnyIntegerAttr(0,scalar_types[scalar_count])
+                else:
+                    attr = xdslFloatAttr(0.0,scalar_types[scalar_count])
+                constant = xdslConstant(attr)
+                payload.add_ops([constant])
+                concrete_operands.append(constant.results[0])
+                scalar_count += 1
+                
         value_mapper = {o:p for o,p in zip(operands,concrete_operands)}
         
         new_op = self.source_op.clone(
@@ -180,20 +214,16 @@ class MlirImplementer(AbsImplementer):
         payload.add_ops([new_op,xdslfunc.Return()])
         payload_func = xdslfunc.FuncOp(
             name=self.payload_name,
-            function_type=(operands_types, ()),
+            function_type=(shaped_types, ()),
             region=xdslRegion(payload),
             arg_attrs=xdslArrayAttr(param=[
                 xdslDictionaryAttr(data={ 'llvm.noalias': xdslUnitAttr() })
-                for _ in operands_types
+                for t in shaped_types
             ]),
         )
+        
         return payload_func
     
-    def payload(self):
-        
-        
-        return mlir_func
-        
     def main(self,fmatmul):
         #
         with InsertionPoint.at_block_begin(self.module.body):
@@ -240,14 +270,14 @@ class MlirImplementer(AbsImplementer):
         assert(not self.integrated)
         mlir_packing.integrate([self],self.module,self.ctx)
         self.integrated = True
-    
-    def materialize_schedule(self,input_var):
 
-        matched,match_attr = transform.match_by_attribute(
-            input_var,
+    def materialize_tiling(self,global_handle):
+
+        loop_to_tile,match_attr = transform.match_by_attribute(
+            global_handle,
             self.op_id_attribute
         )
-            
+        
         # Build the transform vectors corresponding to each tiling instruction
         positions = {}
         dims_vectors = {}
@@ -268,8 +298,8 @@ class MlirImplementer(AbsImplementer):
 
         # Actually produce the tiling instructions and annotate the resulting
         # loops
-        current_state = matched
-        tiling_instrs = []
+        current_state = loop_to_tile
+        tiling_instrs = [match_attr]
         loops = []
         for dim,dims_vector in dims_vectors.items():
             # Useless to materialize a loop which will be vectorized
@@ -284,21 +314,17 @@ class MlirImplementer(AbsImplementer):
             )
             loops.append(new_loop)
             # Name the resulting loop
-            annot = transform.annotate(new_loop,dim)
+            annot = transform.annotate(new_loop,f"{self.op_id_attribute}_{dim}")
             #
             tiling_instrs += [new_instr + annot]
 
-        # If no vectorial tile, we scalarize the linalg op just after tiling
-        # if len(self.vectorization) == 0:
-        #     scalarized, scalarization = transform.get_scalarize(current_state)
-        #     current_state = scalarized
-            
-        # Obtain a handler for patterns application
-        parent, parent_instr = transform.get_parent(loops[0])
-        tiling_instrs.append(parent_instr)
+        return tiling_instrs,loops[0]
+
+    def normalize_and_vectorize(self,tiled_loop):
+        parent, parent_instr = transform.get_parent(tiled_loop)
 
         # Canonicalize the code produced by the tiling operations
-        tiling_instrs += transform.tiling_apply_patterns(parent)
+        norm_instrs = transform.tiling_apply_patterns(parent)
 
         # Produce the vectorization instructions
         vect_instrs = []
@@ -309,29 +335,48 @@ class MlirImplementer(AbsImplementer):
             hoisted0,get_hoist0 = transform.vector_hoist(handler)
             vect_instrs = [vectorize] + pre_hoist + [get_hoist0]
             vectorized = hoisted0
+        else:
+            vectorized, scalarization = transform.get_scalarize(current_state)
+            vect_instrs = [scalarization]
 
+        return [parent_instr] + norm_instrs + vect_instrs, vectorized
+
+    def materialize_unrolling(self,vectorized):
+        last_handler = vectorized
         # Produce the unrolling instructions using the annotations on loops
         unroll_instrs = []
         for dim,factor in self.unrolling.items():
             # loop,match_loop = transform.match_by_attribute(vectorized,dim)
-            loop,match_loop = transform.match_by_attribute(vectorized,dim)
+            loop,match_loop = transform.match_by_attribute(vectorized,f"{self.op_id_attribute}_{dim}")
             unroll = transform.get_unroll(loop,factor)
             unroll_instrs += [match_loop,unroll]
+            last_handler = loop
 
         postprocess = []
         if len(self.vectorization) > 0:
             hoisted,get_hoist = transform.vector_hoist(vectorized)
             get_lower = transform.vector_lower_outerproduct_patterns(hoisted)
             postprocess = [get_hoist] + get_lower
+            last_handler = hoisted
+
+        # if len(unroll_instrs) > 0:
+        if False:
+            continuation, parent_instr = transform.get_parent(last_handler)
+            postprocess.append(parent_instr)
+        else:
+            continuation = last_handler
             
-        lines = (
-            [match_attr]
-            + tiling_instrs
-            + vect_instrs
-            + unroll_instrs
-            + postprocess
-        )
-        return lines
+        return unroll_instrs + postprocess, continuation
+    
+    def materialize_schedule(self,input_var):
+            
+        tiling_instrs,tiled_loop = self.materialize_tiling(global_handle=input_var)
+
+        vect_instrs,vectorized = self.normalize_and_vectorize(tiled_loop)
+        
+        unroll_instrs,unrolled = self.materialize_unrolling(vectorized)
+        
+        return tiling_instrs + vect_instrs + unroll_instrs
         
     @classmethod
     def _np_types_spec(cls, types):

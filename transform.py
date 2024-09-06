@@ -19,9 +19,10 @@ def get_seq_signature(
         input_consumed = False,
         has_output = False,
         sym_name = None,
+        input_var = None,
 ):
     sym_name = sym_name if sym_name else get_new_seq_name()
-    input_var = get_new_var()
+    input_var = input_var if input_var else get_new_var()
 
     input_attribute = ""
     if input_consumed:

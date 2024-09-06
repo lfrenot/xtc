@@ -35,7 +35,25 @@ class MlirGraphImplementer(AbsImplementer):
     def reference_impl(self, *operands):
         pass
 
+    def materialize_schedule(self,input_var):
+
+        tiling_block = []
+        last_tiled_loop = None
+        for impl in self.mlir_impls:
+            tiling_instrs, last_tiled_loop = impl.materialize_tiling(input_var)
+            tiling_block += tiling_instrs
+
+        vect_instrs,vectorized = self.mlir_impls[0].normalize_and_vectorize(last_tiled_loop)
+
+        unroll_block = []
+        to_unroll = vectorized
+        for impl in self.mlir_impls:
+            unroll_instrs,to_unroll = impl.materialize_unrolling(to_unroll)
+            unroll_block += unroll_instrs
+        
+        return tiling_block + vect_instrs + unroll_block
+    
     def integrate(self):
         assert(not self.integrated)
-        mlir_packing.integrate(self.mlir_impls,self.module,self.ctx)
+        mlir_packing.integrate([self],self.module,self.ctx)
         self.integrated = True
