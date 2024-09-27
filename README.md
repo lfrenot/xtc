@@ -9,7 +9,7 @@ one relies on upstream MLIR bindings.
 
 Install dependencies (Debian):
 ```
-sudo apt install pybind11-dev
+sudo apt install pybind11-dev python3-numpy
 ```
 
 Choose the commit for which xdsl is made (patches are in the directory
