@@ -1,3 +1,5 @@
+from typing import Tuple,cast
+
 import copy
 
 sym_count = 0
@@ -16,11 +18,11 @@ def get_new_seq_name():
     return new_seq_name
 
 def get_seq_signature(
-        input_consumed = False,
-        has_output = False,
-        sym_name = None,
-        input_var = None,
-):
+        input_consumed: bool = False,
+        has_output: bool = False,
+        sym_name: str | None = None,
+        input_var: str | None = None,
+) -> Tuple[str,str,str]:
     sym_name = sym_name if sym_name else get_new_seq_name()
     input_var = input_var if input_var else get_new_var()
 
@@ -39,11 +41,18 @@ def get_seq_signature(
 
     return sym_name, input_var, seq_sig
 
-def get_terminator(namespace = "transform", result = None):
-    tail = f" {result} : !transform.any_op" if result else ""
-    return f"{namespace}.yield{tail}"
+def get_terminator(
+        result: str,
+        namespace: str = "transform",
+) -> str:
+    return f"{namespace}.yield {result} : !transform.any_op"
 
-def get_vectorize_children(op):
+def get_empty_terminator(
+        namespace: str = "transform"
+) -> str:
+    return f"{namespace}.yield"
+
+def get_vectorize_children(op: str) -> list[str]:
     vectorized = get_new_var()
     vectorize = (
         f"{vectorized} = transform.structured.vectorize_children_and_apply_patterns "
@@ -64,7 +73,7 @@ def get_registered_pass(op,reg):
 def get_vectorize(op):
     return f"transform.structured.vectorize {op} : !transform.any_op"
 
-def get_scalarize(op):
+def get_scalarize(op: str) -> str:
     scalar = get_new_var()
     scalarization = (
         f"{scalar} = transform.structured.scalarize {op}"
@@ -72,7 +81,7 @@ def get_scalarize(op):
     )
     return scalar,scalarization
 
-def get_parent(op):
+def get_parent(op: str) -> Tuple[str,str]:
     parent = get_new_var()
     parenting = (
         f"{parent} = transform.get_parent_op {op} "
@@ -80,7 +89,7 @@ def get_parent(op):
     )
     return parent,parenting
 
-def get_unroll(loop,factor):
+def get_unroll(loop: str,factor: int) -> str:
     return (
         f"transform.loop.unroll {loop}"
         + "{ factor = "
@@ -89,10 +98,10 @@ def get_unroll(loop,factor):
     )
 
 def produce_tiling_instr(
-        current_state,
-        dims_vector,
-        parallel = False
-    ):
+        current_state: str,
+        dims_vector: list[int],
+        parallel: bool = False
+    ) -> Tuple[str,str,str]:
 
     new_state = get_new_var()
     new_loop = get_new_var()
@@ -118,13 +127,13 @@ def produce_tiling_instr(
     )
     return new_state,new_loop,str_tile
 
-def annotate(op,annotation):
+def annotate(op: str,annotation: str) -> str:
     return (
         "transform.annotate " + op + "\"" + annotation + "\""
         + ": !transform.any_op"
     )
 
-def match_by_attribute(op,attr):
+def match_by_attribute(op: str,attr: str) -> (Tuple[str,str]):
     nvar = get_new_var()
     return nvar, (
         nvar + " = transform.structured.match "
@@ -148,14 +157,14 @@ def apply_patterns(hl_var,patterns):
         "} {apply_cse} : !transform.any_op",
     ]
 
-def vector_pre_hoist_apply_patterns(hl_var):
+def vector_pre_hoist_apply_patterns(hl_var: str) -> list[str]:
     hl_patterns0 = apply_patterns(hl_var, [
         'transform.apply_patterns.memref.fold_memref_alias_ops',
         'transform.apply_patterns.canonicalization',
     ])
     return hl_patterns0
 
-def vector_lower_outerproduct_patterns(hl_var):
+def vector_lower_outerproduct_patterns(hl_var: str) -> list[str]:
     hl_patterns0 = apply_patterns(hl_var, [
         "transform.apply_patterns.vector.lower_outerproduct",
         "transform.apply_patterns.vector.lower_contraction lowering_strategy = \"outerproduct\"",
@@ -163,7 +172,7 @@ def vector_lower_outerproduct_patterns(hl_var):
     ])
     return hl_patterns0
 
-def vector_hoist(hl_var):
+def vector_hoist(hl_var:str) -> list[str]:
     nvar = get_new_var()
     hoist = (
         f"{nvar} = transform.structured.hoist_redundant_vector_transfers "
@@ -171,7 +180,7 @@ def vector_hoist(hl_var):
     )
     return nvar, hoist
 
-def tiling_apply_patterns(hl_var):
+def tiling_apply_patterns(hl_var: str) -> list[str]:
     hl_patterns0 = apply_patterns(hl_var, [
         'transform.apply_patterns.canonicalization',
         'transform.apply_patterns.linalg.tiling_canonicalization',
