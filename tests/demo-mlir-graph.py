@@ -1,7 +1,5 @@
 import os,sys
 
-sys.path.append('../')
-
 from MlirNodeImplementer import MlirNodeImplementer
 from MlirGraphImplementer import MlirGraphImplementer
 

@@ -1,7 +1,5 @@
 import os,sys
 
-sys.path.append('../')
-
 from MlirNodeImplementer import MlirNodeImplementer as MlirImplementer
 
 from xdsl.dialects import func,linalg

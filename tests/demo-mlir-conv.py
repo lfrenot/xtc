@@ -1,8 +1,4 @@
-from setup_mlir_conv import generic_conv0
-
 import os,sys
-
-sys.path.append('../')
 
 from MlirImplementer import MlirImplementer
 

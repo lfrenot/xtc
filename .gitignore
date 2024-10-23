@@ -2,3 +2,6 @@ __*
 *.so
 *.csv
 venv
+build
+dist
+*egg-info*

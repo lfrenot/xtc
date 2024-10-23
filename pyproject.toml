@@ -1,3 +1,24 @@
+[project]
+name = "mlir_loop"
+version = "0.1"
+dependencies = ['matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml', 'xdsl']
+
+[tool.setuptools]
+platforms = ["Linux"]
+zip-safe = false
+
+[tool.setuptools.package-data]
+mlir_loop = ["py.typed"]
+
+[project.scripts]
+mlir-loop = "src.mlir_loop:main"
+loop-display = "src.display_results:main"
+loop-explore = "src.explore:main"
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.pyright]
 reportImportCycles = false
 reportUnnecessaryIsInstance = false

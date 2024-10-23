@@ -2,8 +2,6 @@ import os, sys
 from xdsl.dialects import func, linalg
 from xdsl.dialects.builtin import f32
 
-sys.path.append("../")
-
 from MlirNodeImplementer import MlirNodeImplementer
 from MlirGraphImplementer import MlirGraphImplementer
 from xdsl_aux import parse_xdsl_module

@@ -1,3 +1,5 @@
+#! venv/bin/python3
+
 import argparse
 import os
 from xdsl.dialects import func, linalg
@@ -182,5 +184,3 @@ def main():
             color=args.color,
             debug=args.debug,
         )
-if __name__ == '__main__':
-    main()
