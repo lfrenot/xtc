@@ -29,48 +29,6 @@ k = 1024
 elt_type = f32
 vectors_size = 16
 
-block = Block(arg_types=(elt_type,elt_type,elt_type))
-mulf = Mulf(
-    block.args[0],
-    block.args[1],
-    FastMathFlagsAttr("fast"),
-)
-addf = Addf(
-    block.args[2],
-    mulf.results[0],
-    FastMathFlagsAttr("fast"),
-)
-block.add_ops([
-    mulf,
-    addf,
-    linalg.YieldOp(addf.results[0])
-])
-
-linalg_generic = linalg.Generic(
-    (
-        TestSSAValue(MemRefType(elt_type, [i, k])),
-        TestSSAValue(MemRefType(elt_type, [k, j])),
-    ),
-    (TestSSAValue(MemRefType(elt_type, [i, j])),),
-    Region(block),
-    (
-        AffineMapAttr(
-            AffineMap(3,0,(AffineExpr.dimension(0),AffineExpr.dimension(2)))
-        ),
-        AffineMapAttr(
-            AffineMap(3,0,(AffineExpr.dimension(2),AffineExpr.dimension(1)))
-        ),
-        AffineMapAttr(
-            AffineMap(3,0,(AffineExpr.dimension(0),AffineExpr.dimension(1)))
-        ),
-    ),
-    (
-        linalg.IteratorTypeAttr.parallel(),
-        linalg.IteratorTypeAttr.parallel(),
-        linalg.IteratorTypeAttr.reduction(),
-    ),
-)
-
 linalg_matmul = linalg.MatmulOp(
     inputs = (
         TestSSAValue(MemRefType(elt_type,(i,k))),
@@ -81,7 +39,7 @@ linalg_matmul = linalg.MatmulOp(
 
 impl = MlirImplementer(
     mlir_install_dir=f"{home}/bin/llvm-xdsl",
-    source_op = linalg_generic,
+    source_op = linalg_matmul,
     dims = {'i':i,'j':j,'k':k},
     parallel_dims = ['i','j'],
     reduction_dims = ['k'],
