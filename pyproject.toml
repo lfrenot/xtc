@@ -11,9 +11,9 @@ zip-safe = false
 mlir_loop = ["py.typed"]
 
 [project.scripts]
-mlir-loop = "src.mlir_loop:main"
-loop-display = "src.display_results:main"
-loop-explore = "src.explore:main"
+mlir-loop = "mlir_loop:main"
+loop-display = "display_results:main"
+loop-explore = "explore:main"
 
 [build-system]
 requires = ["setuptools>=61", "wheel"]
