@@ -41,7 +41,9 @@ class MlirImplementer(ABC):
         mlir_install_dir: str,
         xdsl_func: xdslfunc.FuncOp,
         vectors_size: int,
+        concluding_passes: list[str],
     ):
+        self.concluding_passes = concluding_passes
         # Compilation information
         self.vectors_size = vectors_size
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
@@ -79,7 +81,7 @@ class MlirImplementer(ABC):
         sym_name, input_var, seq_sig = transform.get_seq_signature(
             input_var=myvar, sym_name=sym_name
         )
-        kernel = self.schedule_kernel(signature=seq_sig, input_var=input_var)
+        handle,kernel = self.schedule_kernel(signature=seq_sig, input_var=input_var)
         self._mlir_module.inject_schedule(kernel)
 
     @abstractmethod
@@ -87,7 +89,7 @@ class MlirImplementer(ABC):
         self,
         signature: str,
         input_var: str,
-    ) -> list[str]:
+    ) -> tuple[str,list[str]]:
         pass
 
     def build_disassemble_extra_opts(

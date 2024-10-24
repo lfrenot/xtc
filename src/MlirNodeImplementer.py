@@ -23,6 +23,7 @@ class MlirNodeImplementer(MlirImplementer):
         dims: dict[str, int],
         parallel_dims: list[str],
         reduction_dims: list[str],
+        concluding_passes: list[str] = [],
         vectors_size: int = 16,
         payload_name: str | None = None,
     ):
@@ -39,7 +40,7 @@ class MlirNodeImplementer(MlirImplementer):
         #
         xdsl_func = xdsl_operator_to_function(source_op, payload_name)
         #
-        super().__init__(mlir_install_dir, xdsl_func, vectors_size)
+        super().__init__(mlir_install_dir, xdsl_func, vectors_size, concluding_passes)
         #
         self.dims = dims
         self.parallel_dims = parallel_dims
@@ -129,9 +130,12 @@ class MlirNodeImplementer(MlirImplementer):
         signature: str,
         input_var: str,
     ) -> list[str]:
-        body = self.materialize_schedule(input_var=input_var)
+        handle,body = self.materialize_schedule(input_var=input_var)
+        for p in self.concluding_passes:
+            handle,instr = transform.get_registered_pass(handle,p)
+            body.append(instr)
         kernel = [signature, "{"] + body + [transform.get_empty_terminator(), "}"]
-        return kernel
+        return handle,kernel
 
     def materialize_tiling(self, global_handle: str) -> tuple[list[str], str]:
 
@@ -234,14 +238,14 @@ class MlirNodeImplementer(MlirImplementer):
 
         return unroll_instrs + postprocess, continuation
 
-    def materialize_schedule(self, input_var: str) -> list[str]:
+    def materialize_schedule(self, input_var: str) -> tuple[str,list[str]]:
         tiling_instrs, tiled_loop = self.materialize_tiling(global_handle=input_var)
         vect_instrs, vectorized = self.normalize_and_vectorize(tiled_loop)
-        unroll_instrs, _ = self.materialize_unrolling(vectorized)
+        unroll_instrs, unrolled = self.materialize_unrolling(vectorized)
         tiling_and_vect_instrs = tiling_instrs + vect_instrs
         full_schedule = tiling_and_vect_instrs + unroll_instrs
 
-        return full_schedule
+        return unrolled,full_schedule
 
     @classmethod
     def _np_types_spec(

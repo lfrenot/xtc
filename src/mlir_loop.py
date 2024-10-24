@@ -24,6 +24,14 @@ def main():
         help="The directory where LLVM binaries are installed.",
     )
     parser.add_argument(
+        "--concluding-passes",
+        metavar = "N",
+        type=str,
+        nargs="*",
+        default = [],
+        help="Conclude the transform script with MLIR arbitrary passes."
+    )
+    parser.add_argument(
         "--vectors-size",
         type=int,
         default=16,
@@ -120,6 +128,7 @@ def main():
             reduction_dims = reduction_dims,
             vectors_size = args.vectors_size,
             payload_name = implementer_name,
+            concluding_passes = args.concluding_passes,
         )
         #
         if "loop.tiles_names" in o.attributes:
@@ -159,6 +168,7 @@ def main():
         vectors_size=args.vectors_size,
         xdsl_func=myfunc,
         nodes=impls,
+        concluding_passes = args.concluding_passes,
     )
     if args.evaluate:
         e = impl_graph.evaluate(
