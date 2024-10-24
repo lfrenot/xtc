@@ -255,7 +255,7 @@ class MlirNodeImplementer(MlirImplementer):
         #
         unroll_instrs, unrolled = self.materialize_unrolling(vectorized)
         #
-        tiling_and_vect_instrs = tiling_instrs + stamp_instrs + vect_instrs
+        tiling_and_vect_instrs = tiling_instrs + vect_instrs
         full_schedule = tiling_and_vect_instrs + unroll_instrs
 
         return unrolled,full_schedule
