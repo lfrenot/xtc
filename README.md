@@ -3,7 +3,15 @@
 The ```mlir-loop``` tool provides a high-level, declarative syntax for
 controlling the scheduling of MLIR linear algebra (```linalg```)
 operators. For now, it only applies at ```memref``` level
-(not ```tensor```). See the example below.
+(not ```tensor```) and supports the following transformations:
++ Tiling
++ Loop interchange
++ Vectorization
++ Unrolling
+
+See the code below. For the simplicity of the example, it is a
+single operator function, but the tool accepts multiple operator
+functions.
 
 ```
 func.func @myfun(
@@ -11,21 +19,6 @@ func.func @myfun(
   %B: memref<1024x128xf32>,
   %C: memref<512x128xf32>
 ) {
-  %cst = arith.constant 0.000000e+00 : f32
-  linalg.fill
-    {
-      loop.dims = {"i"=512,"j"=128},
-      loop.parallel_dims = ["i","j"],
-      loop.reduction_dims = [],
-      loop.tiles_names = {"i" = ["i1"], "j" = ["j1"]},
-      loop.tiles_sizes = {i1 = 4, j1 = 64},
-      loop.interchange = ["i","j","i1","j1"],
-      loop.vectorize = ["j1"],
-      loop.parallelize = ["i"],
-      loop.unroll = {i1 = 4}
-    }
-    ins(%cst : f32)
-    outs(%C : memref<512x128xf32>)
   linalg.matmul
     {
       loop.dims = {"i"=512,"j"=128,"k"=1024},
@@ -43,6 +36,18 @@ func.func @myfun(
   return
 }
 ```
+
+Under the hood, this declarative "loop" attributes dialect is
+translated into the corresponding MLIR ```transform``` dialect
+command sequence. Thus, ```mlir-loop``` transformations fully reuse
+those implemented in ```mlir-opt```.
+
+Roadmap:
++ Implement graph-level transformations (fusion, etc.).
++ Implement more node-level transformations (padding, packing, etc.).
++ Allow the insertion of arbitrary MLIR passes after tiling, or
+  after vectorization, or after unrolling.
++ Integrate with an ML front-end.
 
 ## Installation instructions
 
@@ -86,13 +91,16 @@ Add the Python bindings to your PYTHONPATH:
 export PYTHONPATH=$PYTHONPATH:$HOME/bin/llvm-xdsl/python_packages/mlir_core
 ```
 
-## Install requirements
+### Install and patch XDSL
 
 ```
-pip install -r requirements.txt
+https://github.com/xdslproject/xdsl
+cd xdsl
+git apply /path/to/each/patch
+pip install .
 ```
 
-### TVM backend requirements
+### TVM backend requirements (optional)
 
 For using tvm backend, install TVM and do (on pinocchio use for instance TVM installed in `/opt/local/tvm/tvm-v0.16.0.rc0/`):
 ```
@@ -104,18 +112,19 @@ Note that if compiling TVM version v0.16 from source, one should first
 apply the patch `patches/tvm-Bugfix-TIR-Fix-race-on-ComputationCache.patch`
 which fix a race condition in TVM.
 
-### JIR backend requirements
+### JIR backend requirements (optional)
 
 For using jir backend, install JIR (ref to https://gitlab.inria/fr/jprotopo/jir.git) and set python path:
 ```
 export PYTHONPATH=$PYTHONPATH:/path_to_jir
 ```
 
-## Use it
+## Install and use it
 
-Installation: ```pip install .```
-
-Example: ```mlir-loop tests/annotated_matmul.mlir --evaluate --print-assembly```
+```
+pip install .
+mlir-loop tests/annotated_matmul.mlir --evaluate --print-assembly
+```
 
 ## Exploration
 
