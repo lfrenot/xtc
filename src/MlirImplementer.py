@@ -30,10 +30,9 @@ from ext_tools import (
     objdump_opts,
     objdump_color_opts,
 )
-import transform
 
 
-class MlirImplementer(MlirModule,ABC):
+class MlirImplementer(MlirModule, ABC):
 
     def __init__(
         self,
@@ -42,10 +41,8 @@ class MlirImplementer(MlirModule,ABC):
         vectors_size: int,
         concluding_passes: list[str],
     ):
-        super().__init__(xdsl_func)
-        self.concluding_passes = concluding_passes
+        super().__init__(xdsl_func, vectors_size, concluding_passes)
         # Compilation information
-        self.vectors_size = vectors_size
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
         self.shared_path = [f"-Wl,--rpath={mlir_install_dir}/lib/"]
         self.cmd_run_mlir = [
@@ -122,10 +119,8 @@ class MlirImplementer(MlirModule,ABC):
         disassemble_extra_opts = self.build_disassemble_extra_opts(
             obj_file=obj_file, color=color
         )
-        symbol = f"--disassemble={self.payload_name}" if self.payload_name else None
-        disassemble_cmd = (
-            [objdump_bin] + objdump_opts + [symbol] + disassemble_extra_opts
-        )
+        symbol = [f"--disassemble={self.payload_name}"] if self.payload_name else []
+        disassemble_cmd = [objdump_bin] + objdump_opts + symbol + disassemble_extra_opts
         print(" ".join(disassemble_cmd))
         bc_process = self.execute_command(
             cmd=disassemble_cmd, pipe_stdoutput=False, debug=debug
@@ -133,7 +128,7 @@ class MlirImplementer(MlirModule,ABC):
 
     def execute_command(
         self,
-        cmd: str,
+        cmd: list[str],
         debug: bool,
         input_pipe: str | None = None,
         pipe_stdoutput: bool = True,
@@ -158,13 +153,13 @@ class MlirImplementer(MlirModule,ABC):
 
     def evaluate(
         self,
-        print_source_ir=False,
-        print_transformed_ir=False,
-        print_assembly=False,
-        color=True,
-        dump_file=dump_file,
-        debug=False,
-        print_lowered_ir=False,
+        print_source_ir: bool = False,
+        print_transformed_ir: bool = False,
+        print_assembly: bool = False,
+        color: bool = True,
+        dump_file: str = dump_file,
+        debug: bool = False,
+        print_lowered_ir: bool = False,
     ):
         exe_dump_file = f"{dump_file}.o"
 
@@ -196,21 +191,21 @@ class MlirImplementer(MlirModule,ABC):
 
     def generate_without_compilation(
         self,
-        color=True,
+        color: bool = True,
     ):
         return str(self.module)
 
     def compile(
         self,
-        print_source_ir=False,
-        print_transformed_ir=False,
-        print_assembly=False,
-        color=True,
-        dump_file=dump_file,
-        debug=False,
-        print_lowered_ir=False,
-        shared_lib=False,
-        executable=False,
+        print_source_ir: bool = False,
+        print_transformed_ir: bool = False,
+        print_assembly: bool = False,
+        color: bool = True,
+        dump_file: str = dump_file,
+        debug: bool = False,
+        print_lowered_ir: bool = False,
+        shared_lib: bool = False,
+        executable: bool = False,
         **kwargs,
     ):
         save_temps = kwargs.get("save_temps", False)
@@ -242,9 +237,6 @@ class MlirImplementer(MlirModule,ABC):
 
         llc_cmd = self.cmd_llc + opt_pic + [bc_dump_file, "-o", obj_dump_file]
         bc_process = self.execute_command(cmd=llc_cmd, debug=debug)
-
-        # clang_cmd = self.cmd_clang + ['-c', ir_dump_file, '-o', exe_dump_file]
-        # bc_process = self.execute_command(cmd=clang_cmd, debug = debug)
 
         if print_assembly:
             disassemble_process = self.disassemble(
@@ -289,15 +281,15 @@ class MlirImplementer(MlirModule,ABC):
 
     def compile_and_evaluate(
         self,
-        print_source_ir=False,
-        print_transformed_ir=False,
-        print_ir_after=[],
-        print_ir_before=[],
-        print_assembly=False,
-        color=True,
-        debug=False,
-        print_lowered_ir=False,
-        dump_file=None,
+        print_source_ir: bool = False,
+        print_transformed_ir: bool = False,
+        print_ir_after: list[str] = [],
+        print_ir_before: list[str] = [],
+        print_assembly: bool = False,
+        color: bool = True,
+        debug: bool = False,
+        print_lowered_ir: bool = False,
+        dump_file: str | None = None,
     ):
         with tempfile.TemporaryDirectory() as tdir:
             if dump_file is None:
