@@ -46,8 +46,6 @@ Roadmap:
 + Allow tensor-level specifications
 + Implement graph-level transformations (fusion, etc.).
 + Implement more node-level transformations (padding, packing, etc.).
-+ Allow the insertion of arbitrary MLIR passes after tiling, or
-  after vectorization, or after unrolling.
 + Integrate with an ML front-end.
 
 ## Installation instructions
