@@ -14,7 +14,6 @@ from mlir.passmanager import PassManager
 import utils
 from evaluator import Evaluator, Executor
 from MlirModule import MlirModule
-from xdsl_aux import brand_inputs_with_noalias
 from ext_tools import (
     transform_opts,
     lowering_opts,
@@ -34,8 +33,7 @@ from ext_tools import (
 import transform
 
 
-# class MlirImplementer:
-class MlirImplementer(ABC):
+class MlirImplementer(MlirModule,ABC):
 
     def __init__(
         self,
@@ -44,6 +42,7 @@ class MlirImplementer(ABC):
         vectors_size: int,
         concluding_passes: list[str],
     ):
+        super().__init__(xdsl_func)
         self.concluding_passes = concluding_passes
         # Compilation information
         self.vectors_size = vectors_size
@@ -59,40 +58,6 @@ class MlirImplementer(ABC):
         self.cmd_llc = [f"{mlir_install_dir}/bin/llc"] + llc_opts
         self.cmd_opt = [f"{mlir_install_dir}/bin/opt"] + opt_opts
         self.cmd_cc = [cc_bin]
-        # Module definition
-        brand_inputs_with_noalias(xdsl_func)
-        self._mlir_module = MlirModule()
-        payload_func = self._mlir_module.parse_and_add_function(str(xdsl_func))
-        self.payload_name = str(payload_func.name).replace('"', "")
-        self._mlir_module.measure_execution_time(
-            new_function_name="entry",
-            measured_function_name=self.payload_name,
-        )
-
-    @property
-    def ctx(self):
-        return self._mlir_module.ctx
-
-    @property
-    def module(self):
-        return self._mlir_module.module
-
-    def inject_schedule(self):
-        sym_name = "@__transform_main"
-        myvar = transform.get_new_var()
-        sym_name, input_var, seq_sig = transform.get_seq_signature(
-            input_var=myvar, sym_name=sym_name
-        )
-        handle,kernel = self.schedule_kernel(signature=seq_sig, input_var=input_var)
-        self._mlir_module.inject_schedule(kernel)
-
-    @abstractmethod
-    def schedule_kernel(
-        self,
-        signature: str,
-        input_var: str,
-    ) -> tuple[str,list[str]]:
-        pass
 
     def build_disassemble_extra_opts(
         self,
