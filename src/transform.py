@@ -160,7 +160,7 @@ def apply_patterns(hl_var,patterns):
 def vector_pre_hoist_apply_patterns(hl_var: str) -> list[str]:
     hl_patterns0 = apply_patterns(hl_var, [
         'transform.apply_patterns.memref.fold_memref_alias_ops',
-        'transform.apply_patterns.canonicalization',
+        # 'transform.apply_patterns.canonicalization',
     ])
     return hl_patterns0
 
@@ -168,7 +168,7 @@ def vector_lower_outerproduct_patterns(hl_var: str) -> list[str]:
     hl_patterns0 = apply_patterns(hl_var, [
         "transform.apply_patterns.vector.lower_outerproduct",
         "transform.apply_patterns.vector.lower_contraction lowering_strategy = \"outerproduct\"",
-        'transform.apply_patterns.canonicalization',
+        # 'transform.apply_patterns.canonicalization',
     ])
     return hl_patterns0
 
