@@ -45,7 +45,12 @@ class MlirNodeImplementer(MlirImplementer):
         #
         xdsl_func = xdsl_operator_to_function(source_op, payload_name)
         #
-        super().__init__(mlir_install_dir, xdsl_func, vectors_size, concluding_passes)
+        super().__init__(
+            mlir_install_dir = mlir_install_dir,
+            xdsl_func = xdsl_func,
+            vectors_size = vectors_size,
+            concluding_passes = concluding_passes
+        )
         #
         self.loop_stamps = loop_stamps
         #

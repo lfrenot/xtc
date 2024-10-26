@@ -27,10 +27,10 @@ class MlirGraphImplementer(MlirImplementer):
             self.nodes[impl.payload_name] = impl
         #
         super().__init__(
-            mlir_install_dir,
-            xdsl_func,
-            vectors_size,
-            concluding_passes,
+            mlir_install_dir = mlir_install_dir,
+            xdsl_func = xdsl_func,
+            vectors_size = vectors_size,
+            concluding_passes = concluding_passes,
         )
 
     @override
