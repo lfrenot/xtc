@@ -1,9 +1,10 @@
 transform_opts = [
     "transform-interpreter",
-    "canonicalize",
 ]
 
 lowering_opts = [
+    "canonicalize",
+    "cse",
     "lower-affine",
     "convert-vector-to-scf",
     "convert-linalg-to-loops",
@@ -71,6 +72,7 @@ cc_bin = "cc"
 
 objdump_opts = [
     '-dr',
+    '-Mintel',
     '--no-addresses',
     '--no-show-raw-insn',
     '--visualize-jumps'

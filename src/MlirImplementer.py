@@ -6,7 +6,11 @@ from mlir.ir import (
 )
 from mlir.dialects import transform
 from xdsl.dialects import func as xdslfunc
-from mlir.dialects.transform import structured, vector, get_parent_op
+from mlir.dialects.transform import (
+    structured,
+    vector,
+    get_parent_op,
+)
 
 from xdsl_aux import brand_inputs_with_noalias
 from MlirCompiler import MlirCompiler
@@ -46,6 +50,13 @@ class MlirImplementer(MlirCompiler, ABC):
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()
                 vector.ApplyLowerContractionPatternsOp()
+            # TODO: hoist the vectors at MLIR level
+            # handle = structured.structured_hoist_redundant_vector_transfers(
+            #     transform.AnyOpType.get(), handle
+            # )
+            # handle = structured.structured_hoist_redundant_vector_broadcasts(
+            #     transform.AnyOpType.get(), handle
+            # )
         return handle
 
     @abstractmethod
@@ -81,8 +92,10 @@ class MlirImplementer(MlirCompiler, ABC):
             self.loc,
         ):
             handle = self.generate_tiling()
-            handle = self.generate_vectorization(handle)
+            # handle = self.generate_vectorization(handle)
             self.generate_unroll(handle)
+            # TODO: probably better here
+            handle = self.generate_vectorization(handle)
             for p in self.concluding_passes:
                 handle = transform.ApplyRegisteredPassOp(
                     transform.AnyOpType.get(), handle, pass_name=p

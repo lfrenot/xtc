@@ -12,6 +12,7 @@ from mlir.dialects.transform import (
     structured,
 )
 from mlir.dialects.transform.loop import loop_unroll
+from mlir.dialects.transform.loop import loop_hoist_loop_invariant_subsets
 from mlir.ir import UnitAttr
 from xdsl_aux import xdsl_operator_to_function
 from MlirImplementer import MlirImplementer
@@ -183,6 +184,7 @@ class MlirNodeImplementer(MlirImplementer):
             # Annotate the resulting loop
             generated_loop = tiling_command.results[1]
             transform.AnnotateOp(generated_loop, f"{self.op_id_attribute}_{tile_name}")
+            #
             all_loops.append(generated_loop)
             #
             op_to_tile = tiling_command.results[0]
@@ -201,7 +203,11 @@ class MlirNodeImplementer(MlirImplementer):
                 target=handle,
                 op_attrs={f"{self.op_id_attribute}_{dim}": UnitAttr.get()},
             )
+            # TODO: LLVM metadata instead of transform unroll may put less pressure
+            # on the front-end
+            # https://llvm.org/docs/LangRef.html#llvm-loop
             loop_unroll(match0, factor)
+        generated_loop = loop_hoist_loop_invariant_subsets(handle)
 
     @override
     def generate_unroll(self, handle):

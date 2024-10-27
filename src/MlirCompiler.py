@@ -32,7 +32,6 @@ from ext_tools import (
 
 from MlirModule import MlirModule
 
-
 class MlirCompiler(MlirModule, ABC):
     def __init__(self, mlir_install_dir: str, xdsl_funcs: list[xdslfunc.FuncOp]):
         assert len(xdsl_funcs) > 0

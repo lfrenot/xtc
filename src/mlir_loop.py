@@ -191,7 +191,7 @@ def main():
             or args.print_lowered_ir
             or args.print_assembly
         )
-        e = impl_graph.evaluate(
+        e = impl_graph.compile(
             print_source_ir=print_source,
             print_transformed_ir=args.print_transformed_ir,
             print_lowered_ir=args.print_lowered_ir,
