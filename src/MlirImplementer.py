@@ -20,7 +20,7 @@ class MlirImplementer(MlirCompiler, ABC):
     def __init__(
         self,
         xdsl_func: xdslfunc.FuncOp,
-        vectors_size: int,
+        always_vectorize: bool,
         concluding_passes: list[str],
         mlir_install_dir: str,
     ):
@@ -29,7 +29,7 @@ class MlirImplementer(MlirCompiler, ABC):
         #
         super().__init__(mlir_install_dir, [xdsl_func])
         #
-        self.vectors_size = vectors_size
+        self.always_vectorize = always_vectorize
         self.concluding_passes = concluding_passes
         #
         self.schedule_injected = False
@@ -45,7 +45,7 @@ class MlirImplementer(MlirCompiler, ABC):
             handle,
             isolated_from_above=True,
         )
-        if self.vectors_size > 0:
+        if self.always_vectorize or self.vectorize:
             handle = structured.VectorizeChildrenAndApplyPatternsOp(handle)
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()

@@ -34,7 +34,7 @@ class MlirNodeImplementer(MlirImplementer):
         payload_name: str = "f",
         concluding_passes: list[str] = [],
         loop_stamps: list[str] = [],
-        vectors_size: int = 16,
+        always_vectorize: bool = True,
     ):
         #
         # Build the payload
@@ -49,8 +49,8 @@ class MlirNodeImplementer(MlirImplementer):
         super().__init__(
             mlir_install_dir = mlir_install_dir,
             xdsl_func = xdsl_func,
-            vectors_size = vectors_size,
-            concluding_passes = concluding_passes
+            concluding_passes = concluding_passes,
+            always_vectorize = always_vectorize,
         )
         #
         self.loop_stamps = loop_stamps

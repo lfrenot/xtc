@@ -12,9 +12,10 @@ func.func @myfun(
       loop.dims = {"i"=256,"j"=256,"k"=512},
       loop.parallel_dims = ["i","j"],
       loop.reduction_dims = ["k"],
-      loop.tiles_names = {"i" = ["i1"], "j" = ["j1"], "k" = ["k1"]},
-      loop.tiles_sizes = {i1 = 1, j1 = 64, k1 = 8},
-      loop.interchange = ["i","j","k","i1","k1","j1"],
+      // loop.tiles_names = {"i" = ["i1",1], "j" = ["j1",64], "k" = ["k1",8]},
+      loop.tiles_names = {"j" = ["j1"], "k" = ["k1"]},
+      loop.tiles_sizes = {j1 = 64, k1 = 8},
+      loop.interchange = ["i","j","k","k1","j1"],
       loop.vectorize = ["j1"],
       loop.unroll = {k1 = 8}
     }

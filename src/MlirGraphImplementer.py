@@ -17,8 +17,8 @@ class MlirGraphImplementer(MlirImplementer):
         mlir_install_dir: str,
         xdsl_func: xdslfunc.FuncOp,
         nodes: list[MlirNodeImplementer],
-        vectors_size: int,
         concluding_passes: list[str] = [],
+        always_vectorize: bool = True,
     ):
         self.nodes: dict[str, MlirNodeImplementer] = {}
         for impl in nodes:
@@ -29,7 +29,7 @@ class MlirGraphImplementer(MlirImplementer):
         super().__init__(
             mlir_install_dir = mlir_install_dir,
             xdsl_func = xdsl_func,
-            vectors_size = vectors_size,
+            always_vectorize = always_vectorize,
             concluding_passes = concluding_passes,
         )
 

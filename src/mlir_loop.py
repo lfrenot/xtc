@@ -39,6 +39,12 @@ def main():
         help="The size of the vector registers (0,4,8 ou 16)."
     )
     parser.add_argument(
+        "--always-vectorize",
+        action="store_true",
+        default = True,
+        help="Vectorize even if no vectorization dimension has been specified.."
+    )
+    parser.add_argument(
         "--print-source-ir",
         action="store_true",
         default = False,
@@ -130,15 +136,19 @@ def main():
             dims = dims,
             parallel_dims = parallel_dims,
             reduction_dims = reduction_dims,
-            vectors_size = args.vectors_size,
+            always_vectorize = args.always_vectorize,
             payload_name = implementer_name,
             concluding_passes = args.concluding_passes,
             loop_stamps = loop_stamps,
         )
         #
         if "loop.tiles_names" in o.attributes:
-            tiles = {}
             for dim,ts in o.attributes["loop.tiles_names"].data.items():
+                # Other syntax
+                # for dim,tiles in o.attributes["loop.tiles_names"].data.items():
+                # name = tiles.data[0].data
+                # size = tiles.data[1].value.data
+                # impl.tile(dim,{name: size})
                 tiles_on_dim = {}
                 for t in ts:
                     t = t.data
@@ -170,7 +180,7 @@ def main():
         #
     impl_graph = MlirGraphImplementer(
         mlir_install_dir=args.llvm_dir,
-        vectors_size=args.vectors_size,
+        always_vectorize=args.always_vectorize,
         xdsl_func=myfunc,
         nodes=impls,
         concluding_passes = args.concluding_passes,

@@ -120,7 +120,7 @@ export PYTHONPATH=$PYTHONPATH:/path_to_jir
 
 ```
 pip install -e .
-mlir-loop tests/annotated_matmul.mlir --evaluate --print-assembly
+mlir-loop tests/avx2_matmul.mlir --evaluate --print-assembly
 ```
 
 ## Exploration
