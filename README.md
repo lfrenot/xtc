@@ -53,7 +53,12 @@ Roadmap:
 The previous version relied on XDSL (file Implementer.py). The current
 one relies on upstream MLIR bindings.
 
-### Install the right version of MLIR
+### MLIR
+
+The MLIR Python bindings are not distributed through PyPi
+(```pip install```). Thus, we need to compile ```llvm-project```,
+even if MLIR headers and binaries are available on Debian
+official repositories.
 
 Install dependencies (Debian):
 ```
@@ -88,7 +93,7 @@ Add the Python bindings to your PYTHONPATH:
 export PYTHONPATH=$PYTHONPATH:$HOME/bin/llvm/python_packages/mlir_core
 ```
 
-### Install and patch XDSL
+### XDSL
 
 ```
 git clone https://github.com/xdslproject/xdsl
