@@ -92,9 +92,7 @@ class MlirImplementer(MlirCompiler, ABC):
             self.loc,
         ):
             handle = self.generate_tiling()
-            # handle = self.generate_vectorization(handle)
             self.generate_unroll(handle)
-            # TODO: probably better here
             handle = self.generate_vectorization(handle)
             for p in self.concluding_passes:
                 handle = transform.ApplyRegisteredPassOp(

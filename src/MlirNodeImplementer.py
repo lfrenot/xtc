@@ -207,7 +207,6 @@ class MlirNodeImplementer(MlirImplementer):
             # on the front-end
             # https://llvm.org/docs/LangRef.html#llvm-loop
             loop_unroll(match0, factor)
-        generated_loop = loop_hoist_loop_invariant_subsets(handle)
 
     @override
     def generate_unroll(self, handle):

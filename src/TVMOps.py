@@ -17,7 +17,7 @@ class Operation():
     def __init__(self, operator, args):
         self.operator = operator
         self.args = args
-        self.tgt = tvm.target.Target(target="llvm -mcpu=native")
+        self.tgt = tvm.target.Target(target="llvm -mcpu=alderlake")
         self.dev = tvm.device(self.tgt.kind.name, 0)
         self.params = None
         self.sch = None
