@@ -32,12 +32,10 @@ from ext_tools import (
 
 from MlirModule import MlirModule
 
-class MlirCompiler(MlirModule, ABC):
-    def __init__(self, mlir_install_dir: str, xdsl_funcs: list[xdslfunc.FuncOp]):
-        assert len(xdsl_funcs) > 0
-        super().__init__(xdsl_funcs)
-        f_names = [str(f.sym_name).replace('"', "") for f in xdsl_funcs]
-        self.disassemble_option = "--disassemble=" + ",".join(f_names)
+class MlirCompiler:
+    def __init__(self, mlir_module: MlirModule, mlir_install_dir: str, functions_of_interest: list[str] = []):
+        self.mlir_module = mlir_module
+        self.disassemble_option = "--disassemble=" + ",".join(functions_of_interest)
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
         self.shared_path = [f"-Wl,--rpath={mlir_install_dir}/lib/"]
         self.cmd_run_mlir = [
@@ -74,8 +72,7 @@ class MlirCompiler(MlirModule, ABC):
 
     def dump_ir(self, title: str):
         print(f"// -----// {title} //----- //", file=sys.stderr)
-        print(str(self.mlir_module), file=sys.stderr)
-
+        print(str(self.mlir_module.mlir_module), file=sys.stderr)
     def mlir_compile(
         self,
         print_source_ir: bool,
@@ -86,19 +83,19 @@ class MlirCompiler(MlirModule, ABC):
     ):
         if print_source_ir:
             self.dump_ir("IR Dump Before transform")
-        pm = PassManager("builtin.module", context=self.mlir_context)
+        pm = PassManager("builtin.module", context=self.mlir_module.mlir_context)
         for opt in transform_opts:
             pm.add(opt)
-        pm.run(self.mlir_module)
-        lop = [o for o in self.mlir_module.body.operations][-1]
+        pm.run(self.mlir_module.mlir_module)
+        lop = [o for o in self.mlir_module.mlir_module.body.operations][-1]
         assert isinstance(lop, NamedSequenceOp)
         lop.erase()
         if print_transformed_ir:
             self.dump_ir("IR Dump After transform")
-        pm = PassManager("builtin.module", context=self.mlir_context)
+        pm = PassManager("builtin.module", context=self.mlir_module.mlir_context)
         for opt in lowering_opts:
             pm.add(opt)
-        pm.run(self.mlir_module)
+        pm.run(self.mlir_module.mlir_module)
 
         if print_lowered_ir:
             self.dump_ir("IR Dump After MLIR Opt")
@@ -157,8 +154,7 @@ class MlirCompiler(MlirModule, ABC):
         print_lowered_ir: bool = False,
     ):
         exe_dump_file = f"{dump_file}.o"
-
-        self.implement(measure=True)
+        self.mlir_module.implement(measure=True)
         self.mlir_compile(
             print_source_ir=print_source_ir,
             print_transformed_ir=print_transformed_ir,
@@ -172,16 +168,14 @@ class MlirCompiler(MlirModule, ABC):
         )
         cmd_run = self.cmd_run_mlir + run_extra_opts
         result = self.execute_command(
-            cmd=cmd_run, input_pipe=str(self.mlir_module), debug=debug
+            cmd=cmd_run, input_pipe=str(self.mlir_module.mlir_module), debug=debug
         )
-
         if print_assembly:
             disassemble_process = self.disassemble(
                 obj_file=exe_dump_file,
                 color=color,
                 debug=debug,
             )
-
         return result.stdout
 
     def generate_without_compilation(
@@ -211,7 +205,7 @@ class MlirCompiler(MlirModule, ABC):
         exe_c_file = f"{dump_file}.main.c"
         exe_dump_file = f"{dump_file}.out"
 
-        self.implement(measure=False)
+        self.mlir_module.implement(measure=False)
 
         self.mlir_compile(
             print_source_ir=print_source_ir,
@@ -220,12 +214,11 @@ class MlirCompiler(MlirModule, ABC):
             debug=debug,
             print_lowered_ir=print_lowered_ir,
         )
-
+        
         translate_cmd = self.cmd_mlirtranslate + ["-o", ir_dump_file]
         llvmir_process = self.execute_command(
-            cmd=translate_cmd, input_pipe=str(self.mlir_module), debug=debug
+            cmd=translate_cmd, input_pipe=str(self.mlir_module.mlir_module), debug=debug
         )
-
         opt_pic = ["--relocation-model=pic"] if shared_lib else []
         opt_cmd = self.cmd_opt + opt_pic + [ir_dump_file, "-o", bc_dump_file]
         bc_process = self.execute_command(cmd=opt_cmd, debug=debug)

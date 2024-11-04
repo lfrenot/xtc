@@ -13,10 +13,10 @@ from mlir.dialects.transform import (
 )
 
 from xdsl_aux import brand_inputs_with_noalias
-from MlirCompiler import MlirCompiler
+from MlirModule import MlirModule
 
 
-class MlirImplementer(MlirCompiler, ABC):
+class MlirImplementer(MlirModule, ABC):
     def __init__(
         self,
         xdsl_func: xdslfunc.FuncOp,
@@ -27,7 +27,7 @@ class MlirImplementer(MlirCompiler, ABC):
         brand_inputs_with_noalias(xdsl_func)
         self.payload_name = str(xdsl_func.sym_name).replace('"', "")
         #
-        super().__init__(mlir_install_dir, [xdsl_func])
+        super().__init__([xdsl_func])
         #
         self.always_vectorize = always_vectorize
         self.concluding_passes = concluding_passes

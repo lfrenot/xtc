@@ -6,6 +6,7 @@ from xdsl.dialects import func, linalg
 from xdsl_aux import parse_xdsl_module
 from MlirNodeImplementer import MlirNodeImplementer
 from MlirGraphImplementer import MlirGraphImplementer
+from MlirCompiler import MlirCompiler
 
 DEFAULT_LLVM_DIR = "/home/hpompougnac/bin/llvm"
 
@@ -183,8 +184,13 @@ def main():
     )
 
     # Apply the transform script
+    compiler = MlirCompiler(
+        mlir_module=impl_graph,
+        mlir_install_dir=args.llvm_dir,
+        functions_of_interest=[str(myfunc.sym_name).replace("\"","")]
+    )
     if args.evaluate:
-        e = impl_graph.evaluate(
+        e = compiler.evaluate(
             print_source_ir=args.print_source_ir,
             print_transformed_ir=args.print_transformed_ir,
             print_lowered_ir=args.print_lowered_ir,
@@ -199,7 +205,7 @@ def main():
             or args.print_lowered_ir
             or args.print_assembly
         )
-        e = impl_graph.compile(
+        e = compiler.compile(
             print_source_ir=print_source,
             print_transformed_ir=args.print_transformed_ir,
             print_lowered_ir=args.print_lowered_ir,
