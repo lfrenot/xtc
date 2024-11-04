@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import subprocess
 import sys
 import os
@@ -340,8 +339,8 @@ class MlirCompiler:
         with utils.LibLoader(libpath) as lib:
             func = getattr(lib, sym)
             assert func is not None, f"Cannot find {sym} in lib {dll}"
-            inputs_spec = self.np_inputs_spec()
-            outputs_spec = self.np_outputs_spec()
+            inputs_spec = self.mlir_module.np_inputs_spec()
+            outputs_spec = self.mlir_module.np_outputs_spec()
             if parameters is None:
                 inputs = [utils.np_init(**spec) for spec in inputs_spec]
                 outputs = [np.empty(**spec) for spec in outputs_spec]
@@ -352,7 +351,7 @@ class MlirCompiler:
             if validate:
                 ref_inputs = [inp.numpy() for inp in parameters[0]]
                 ref_outputs = [np.empty(**spec) for spec in outputs_spec]
-                self.reference_impl(*ref_inputs, *ref_outputs)
+                self.mlir_module.reference_impl(*ref_inputs, *ref_outputs)
                 exec_func = Executor(func)
                 exec_func(*parameters[0], *parameters[1])
                 for out_ref, out in zip(
@@ -366,14 +365,3 @@ class MlirCompiler:
             results = eval_func(*parameters[0], *parameters[1])
         return np.array(results), 0, ""
 
-    @abstractmethod
-    def np_inputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:
-        pass
-
-    @abstractmethod
-    def np_outputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:
-        pass
-
-    @abstractmethod
-    def reference_impl(self, *operands):
-        pass
