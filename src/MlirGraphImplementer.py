@@ -25,7 +25,6 @@ class MlirGraphImplementer(MlirImplementer):
             first_block = cast(xdslBlock, xdsl_func.body.first_block)
             assert impl.source_op in first_block.ops
             self.nodes[impl.payload_name] = impl
-        #
         super().__init__(
             mlir_install_dir = mlir_install_dir,
             xdsl_func = xdsl_func,

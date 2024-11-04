@@ -6,3 +6,4 @@ build
 dist
 *egg-info*
 data
+.lit_test_times.txt

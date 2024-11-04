@@ -125,7 +125,11 @@ export PYTHONPATH=$PYTHONPATH:/path_to_jir
 
 ```
 pip install -e .
-mlir-loop tests/avx2_matmul.mlir --evaluate --print-assembly
+```
+
+Launch tests:
+```
+lit tests/filecheck
 ```
 
 ## Exploration

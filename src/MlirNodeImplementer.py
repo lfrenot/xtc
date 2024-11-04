@@ -36,30 +36,26 @@ class MlirNodeImplementer(MlirImplementer):
         loop_stamps: list[str] = [],
         always_vectorize: bool = True,
     ):
-        #
         # Build the payload
         self.op_id_attribute = f"id{MlirNodeImplementer.count}"
         source_op.attributes[self.op_id_attribute] = xdslUnitAttr()
         MlirNodeImplementer.count += 1
-        # To discard
-        self.source_op = source_op
-        #
         xdsl_func = xdsl_operator_to_function(source_op, payload_name)
-        #
+        # Call the parent constructor
         super().__init__(
             mlir_install_dir = mlir_install_dir,
             xdsl_func = xdsl_func,
             concluding_passes = concluding_passes,
             always_vectorize = always_vectorize,
         )
-        #
+        # Used for validation
+        self.source_op = source_op
+        # Specification of transformations
         self.loop_stamps = loop_stamps
-        #
         self.dims = dims
         self.parallel_dims = parallel_dims
         self.reduction_dims = reduction_dims
         self.tiles = {k: {k: 1} for k, _ in self.dims.items()}
-        self.tile_sizes_cache: dict[str, int] = {}
         self.permutation = self.get_default_interchange()
         self.vectorization = []
         self.parallelization = []
@@ -83,10 +79,6 @@ class MlirNodeImplementer(MlirImplementer):
         dim: str,
         tiles: ty_tiles,
     ):
-        #
-        for k, v in tiles.items():
-            self.tile_sizes_cache[k] = v
-        #
         ndims = list(tiles.keys())
         tiles_sizes = list(tiles.values())
 
@@ -113,7 +105,6 @@ class MlirNodeImplementer(MlirImplementer):
 
     def vectorize(self, vectorization: list[str]):
         self.vectorization = vectorization
-        self.propagate_vectorization()
 
     def parallelize(self, parallelization: list[str]):
         for p in parallelization:
@@ -122,23 +113,6 @@ class MlirNodeImplementer(MlirImplementer):
 
     def unroll(self, unrolling: dict[str, int]):
         self.unrolling = unrolling
-        self.propagate_vectorization()
-
-    def propagate_vectorization(self):
-        # TODO: is it useful ? Evaluation needed
-        # nvect: list[str] = []
-        # for v in self.vectorization:
-        #     ind = self.permutation.index(v)
-        #     for i in list((range(0, ind)))[::-1]:
-        #         dim = self.permutation[i]
-        #         if dim in self.unrolling and dim in self.parallel_dims:
-        #             nvect.append(dim)
-        #         else:
-        #             break
-        # for nv in nvect:
-        #     self.vectorization.append(nv)
-        #     self.unrolling.pop(nv)
-        return
 
     def generate_node_tiling(self, handle):
         # Produce the sequence of commands needed for the tiling
@@ -204,7 +178,7 @@ class MlirNodeImplementer(MlirImplementer):
                 op_attrs={f"{self.op_id_attribute}_{dim}": UnitAttr.get()},
             )
             # TODO: LLVM metadata instead of transform unroll may put less pressure
-            # on the front-end
+            # on MLIR front-end
             # https://llvm.org/docs/LangRef.html#llvm-loop
             loop_unroll(match0, factor)
 

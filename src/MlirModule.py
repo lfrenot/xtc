@@ -62,11 +62,11 @@ class MlirModule:
 
     def measure_execution_time(
         self,
-        new_function_name: str,
+        entry_function_name: str,
         measured_function_name: str,
     ):
         measured_function = self.local_functions[measured_function_name]
-        #
+        # Create the external helpers (these ones are provided by MLIR library)
         f64 = F64Type.get(context=self.mlir_context)
         ext_rtclock = self.add_external_function(
             name="rtclock",
@@ -78,18 +78,18 @@ class MlirModule:
             input_types=[f64],
             output_types=[],
         )
-        #
+        # Create the entry point
         with InsertionPoint.at_block_begin(self.mlir_module.body):
             fmain = func.FuncOp(
-                name=new_function_name,
+                name=entry_function_name,
                 type=FunctionType.get(inputs=[], results=[]),
                 loc=self.loc,
             )
-            self.local_functions[new_function_name] = fmain
-        #
+            self.local_functions[entry_function_name] = fmain
+        # Populate the entry point
         with InsertionPoint(fmain.add_entry_block()), self.loc as loc:
             function_type = measured_function.type
-            #
+            # Fill the parameters with random values
             inputs = []
             for ity in function_type.inputs:
                 if IntegerType.isinstance(ity.element_type):
@@ -100,22 +100,20 @@ class MlirModule:
                 mem = memref.AllocOp(ity, [], [])
                 linalg.fill(scal, outs=[mem])
                 inputs.append(mem)
-            #
-            callrtclock1 = func.CallOp(ext_rtclock, [], loc=self.loc)
-            #
+            # Fill the output with random values
             for oty in function_type.results:
                 v = 0 if IntegerType.isinstance(oty.element_type) else 0.0
                 scal = arith.ConstantOp(oty.element_type, v)
                 mem = memref.AllocOp(oty, [], [])
                 linalg.fill(scal, outs=[mem])
                 inputs.append(mem)
-            #
+            # Execute and print the execution time
+            callrtclock1 = func.CallOp(ext_rtclock, [], loc=self.loc)
             func.CallOp(measured_function, inputs, loc=self.loc)
-            #
             callrtclock2 = func.CallOp(ext_rtclock, [], loc=self.loc)
             time = arith.SubFOp(callrtclock2, callrtclock1, loc=self.loc)
             func.CallOp(ext_printF64, [time], loc=self.loc)
-            #
+            # Dealloc
             for i in inputs:
                 memref.DeallocOp(i)
 

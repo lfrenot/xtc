@@ -50,13 +50,6 @@ class MlirImplementer(MlirCompiler, ABC):
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()
                 vector.ApplyLowerContractionPatternsOp()
-            # TODO: hoist the vectors at MLIR level
-            # handle = structured.structured_hoist_redundant_vector_transfers(
-            #     transform.AnyOpType.get(), handle
-            # )
-            # handle = structured.structured_hoist_redundant_vector_broadcasts(
-            #     transform.AnyOpType.get(), handle
-            # )
         return handle
 
     @abstractmethod
@@ -72,7 +65,7 @@ class MlirImplementer(MlirCompiler, ABC):
         #
         if measure:
             self.measure_execution_time(
-                new_function_name="entry",
+                entry_function_name="entry",
                 measured_function_name=self.payload_name,
             )
         #

@@ -88,27 +88,28 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Parse the input file
     if not os.path.exists(args.filename):
         parser.error(f"{args.filename} does not exist.")
-        
     with open(args.filename, 'r') as f:
         source = f.read()
-
     module = parse_xdsl_module(source)
+    # Select the payload (the 1st function of the module)
     myfunc = None
     for o in module.walk():
         if isinstance(o,func.FuncOp):
             myfunc = o
             break
     assert(myfunc)
-    #
+    # Gather the annotated operations
     annotated_operations = []
     for o in myfunc.walk():
         for attr_name in o.attributes:
             if "loop." in attr_name:
                 annotated_operations.append(o)
                 break
-    #
+    # Build the transform script
     count = 0
     impls = []
     for o in annotated_operations:
@@ -141,7 +142,7 @@ def main():
             concluding_passes = args.concluding_passes,
             loop_stamps = loop_stamps,
         )
-        #
+        # Parse the scheduling attributes
         if "loop.tiles_names" in o.attributes:
             for dim,ts in o.attributes["loop.tiles_names"].data.items():
                 tiles_on_dim = {}
@@ -170,9 +171,9 @@ def main():
             for name,size in o.attributes["loop.unroll"].data.items():
                 unroll[name] = size.value.data
             impl.unroll(unroll)
-        #
+        
         impls.append(impl)
-        #
+        
     impl_graph = MlirGraphImplementer(
         mlir_install_dir=args.llvm_dir,
         always_vectorize=args.always_vectorize,
@@ -180,6 +181,8 @@ def main():
         nodes=impls,
         concluding_passes = args.concluding_passes,
     )
+
+    # Apply the transform script
     if args.evaluate:
         e = impl_graph.evaluate(
             print_source_ir=args.print_source_ir,

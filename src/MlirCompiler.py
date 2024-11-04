@@ -38,8 +38,6 @@ class MlirCompiler(MlirModule, ABC):
         super().__init__(xdsl_funcs)
         f_names = [str(f.sym_name).replace('"', "") for f in xdsl_funcs]
         self.disassemble_option = "--disassemble=" + ",".join(f_names)
-        #
-        # Compilation information
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
         self.shared_path = [f"-Wl,--rpath={mlir_install_dir}/lib/"]
         self.cmd_run_mlir = [
@@ -97,7 +95,6 @@ class MlirCompiler(MlirModule, ABC):
         lop.erase()
         if print_transformed_ir:
             self.dump_ir("IR Dump After transform")
-        #
         pm = PassManager("builtin.module", context=self.mlir_context)
         for opt in lowering_opts:
             pm.add(opt)
