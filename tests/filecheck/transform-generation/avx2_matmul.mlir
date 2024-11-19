@@ -1,4 +1,4 @@
-// RUN: mlir-loop %s --print-source-ir 2>&1 | filecheck %s
+// RUN: mlir-loop %s --print-source-ir --no-alias 2>&1 | filecheck %s
 
 func.func @myfun(
   %A: memref<256x512xf32>,

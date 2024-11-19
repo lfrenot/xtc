@@ -21,10 +21,12 @@ class MlirImplementer(MlirModule, ABC):
         self,
         xdsl_func: xdslfunc.FuncOp,
         always_vectorize: bool,
+        no_alias: bool,
         concluding_passes: list[str],
         mlir_install_dir: str,
     ):
-        brand_inputs_with_noalias(xdsl_func)
+        if no_alias:
+            brand_inputs_with_noalias(xdsl_func)
         self.payload_name = str(xdsl_func.sym_name).replace('"', "")
         #
         super().__init__([xdsl_func])

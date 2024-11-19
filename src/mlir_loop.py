@@ -52,6 +52,11 @@ def main():
         help="Print the source IR."
     )
     parser.add_argument(
+        "--no-alias",
+        action="store_true",
+        help="All tensors are considered alias-free."
+    )
+    parser.add_argument(
         "--print-transformed-ir",
         action="store_true",
         default = False,
@@ -142,6 +147,7 @@ def main():
             payload_name = implementer_name,
             concluding_passes = args.concluding_passes,
             loop_stamps = loop_stamps,
+            no_alias = args.no_alias,
         )
         # Parse the scheduling attributes
         if "loop.tiles_names" in o.attributes:
@@ -181,6 +187,7 @@ def main():
         xdsl_func=myfunc,
         nodes=impls,
         concluding_passes = args.concluding_passes,
+        no_alias = args.no_alias,
     )
 
     # Apply the transform script
