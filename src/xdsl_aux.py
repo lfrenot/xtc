@@ -20,13 +20,14 @@ from xdsl.dialects.builtin import (
 
 from xdsl.context import MLContext
 from xdsl.parser import Parser
-from xdsl.dialects import func,linalg,arith
+from xdsl.dialects import func,linalg,arith, memref
 
 def parse_xdsl_module(source:str):
     context = MLContext()
     context.load_dialect(func.Func)
     context.load_dialect(linalg.Linalg)
     context.load_dialect(arith.Arith)
+    context.load_dialect(memref.MemRef)
     parser = Parser(context, source)
     module = parser.parse_module()
     return module
