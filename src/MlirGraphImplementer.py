@@ -14,7 +14,6 @@ class MlirGraphImplementer(MlirImplementer):
 
     def __init__(
         self,
-        mlir_install_dir: str,
         xdsl_func: xdslfunc.FuncOp,
         nodes: list[MlirNodeImplementer],
         concluding_passes: list[str] = [],
@@ -27,7 +26,6 @@ class MlirGraphImplementer(MlirImplementer):
             assert impl.source_op in first_block.ops
             self.nodes[impl.payload_name] = impl
         super().__init__(
-            mlir_install_dir = mlir_install_dir,
             xdsl_func = xdsl_func,
             always_vectorize = always_vectorize,
             concluding_passes = concluding_passes,
