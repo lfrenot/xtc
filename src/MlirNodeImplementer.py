@@ -114,6 +114,9 @@ class MlirNodeImplementer(MlirImplementer):
     def unroll(self, unrolling: dict[str, int]):
         self.unrolling = unrolling
 
+    def needs_vectorization(self):
+        return len(self.vectorization) > 0
+        
     def generate_node_tiling(self, handle):
         # Produce the sequence of commands needed for the tiling
         tiling_arrays: dict[str, list[int]] = {}

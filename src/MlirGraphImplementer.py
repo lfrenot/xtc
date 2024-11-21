@@ -37,8 +37,15 @@ class MlirGraphImplementer(MlirImplementer):
         for _, impl in self.nodes.items():
             impl.generate_node_unroll(handle)
 
+    def needs_vectorization(self):
+        for impl in self.nodes.values():
+            if impl.needs_vectorization():
+                return True
+        return False
+            
     @override
     def generate_tiling(self):
+        assert len(self.nodes), "Tiling means nothing on zero operators"
         handle = None
         for _, impl in self.nodes.items():
             match0 = structured_match(

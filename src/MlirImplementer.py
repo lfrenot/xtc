@@ -46,13 +46,17 @@ class MlirImplementer(MlirModule, ABC):
             handle,
             isolated_from_above=True,
         )
-        if self.always_vectorize or self.vectorize:
+        if self.always_vectorize or self.needs_vectorization():
             handle = structured.VectorizeChildrenAndApplyPatternsOp(handle)
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()
                 vector.ApplyLowerContractionPatternsOp()
         return handle
 
+    @abstractmethod
+    def needs_vectorization(self):
+        pass
+    
     @abstractmethod
     def generate_tiling(self):
         pass

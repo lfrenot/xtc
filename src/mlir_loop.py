@@ -42,7 +42,6 @@ def main():
     parser.add_argument(
         "--always-vectorize",
         action="store_true",
-        default = True,
         help="Vectorize even if no vectorization dimension has been specified.."
     )
     parser.add_argument(
@@ -115,11 +114,15 @@ def main():
             if "loop." in attr_name:
                 annotated_operations.append(o)
                 break
+    # TODO needed by MlirGraphImplementer, should solve this limitation
+    assert annotated_operations, "At least 1 opeartion should be annotated"
     # Build the transform script
     count = 0
     impls = []
     for o in annotated_operations:
-        dims = {}
+        # TODO these names may be generated
+        assert "loop.dims" in o.attributes, "An annotated operation must declare its dimensions names"
+        dims = dict()
         parallel_dims = []
         reduction_dims = []
         # Parse the initial specification
@@ -181,7 +184,7 @@ def main():
             impl.unroll(unroll)
         
         impls.append(impl)
-        
+
     impl_graph = MlirGraphImplementer(
         always_vectorize=args.always_vectorize,
         xdsl_func=myfunc,
