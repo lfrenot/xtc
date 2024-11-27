@@ -4,6 +4,7 @@ import argparse
 import os
 from xdsl.dialects import func, linalg
 from xdsl_aux import parse_xdsl_module
+from MlirModule import MlirModule
 from MlirNodeImplementer import MlirNodeImplementer
 from MlirGraphImplementer import MlirGraphImplementer
 from MlirCompiler import MlirCompiler
@@ -31,13 +32,6 @@ def main():
         nargs="*",
         default = [],
         help="Conclude the transform script with MLIR arbitrary passes."
-    )
-    parser.add_argument(
-        "--vectors-size",
-        type=int,
-        default=16,
-        choices=[0,4,8,16],
-        help="The size of the vector registers (0,4,8 ou 16)."
     )
     parser.add_argument(
         "--always-vectorize",
@@ -114,8 +108,6 @@ def main():
             if "loop." in attr_name:
                 annotated_operations.append(o)
                 break
-    # TODO needed by MlirGraphImplementer, should solve this limitation
-    assert annotated_operations, "At least 1 opeartion should be annotated"
     # Build the transform script
     count = 0
     impls = []
@@ -185,17 +177,20 @@ def main():
         
         impls.append(impl)
 
-    impl_graph = MlirGraphImplementer(
-        always_vectorize=args.always_vectorize,
-        xdsl_func=myfunc,
-        nodes=impls,
-        concluding_passes = args.concluding_passes,
-        no_alias = args.no_alias,
-    )
+    if len(impls) > 0:
+        impl_module = MlirGraphImplementer(
+            always_vectorize=args.always_vectorize,
+            xdsl_func=myfunc,
+            nodes=impls,
+            concluding_passes = args.concluding_passes,
+            no_alias = args.no_alias,
+        )
+    else:
+        impl_module = MlirModule(xdsl_func=myfunc)
 
     # Apply the transform script
     compiler = MlirCompiler(
-        mlir_module=impl_graph,
+        mlir_module=impl_module,
         mlir_install_dir=args.llvm_dir,
     )
     if args.evaluate:

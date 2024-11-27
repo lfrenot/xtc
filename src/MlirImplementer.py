@@ -32,8 +32,6 @@ class MlirImplementer(MlirModule, ABC):
         self.always_vectorize = always_vectorize
         self.concluding_passes = concluding_passes
         #
-        self.schedule_injected = False
-        #
 
     @property
     def mlir_payload(self):
@@ -69,25 +67,7 @@ class MlirImplementer(MlirModule, ABC):
         pass
 
     @override
-    def implement(self, measure=True):
-        self.check_consistency()
-        #
-        if measure:
-            self.measure_execution_time(
-                entry_function_name="entry",
-                measured_function_name=self.payload_name,
-            )
-        #
-        with InsertionPoint(self.mlir_module.body), self.mlir_context, self.loc:
-            self.mlir_module.operation.attributes[
-                "transform.with_named_sequence"
-            ] = UnitAttr.get()
-            self.named_sequence = transform.NamedSequenceOp(
-                "__transform_main",
-                [transform.AnyOpType.get()],
-                [],
-                arg_attrs=[{"transform.readonly": UnitAttr.get()}],
-            )
+    def _implement(self, measure=True):
         with (
             InsertionPoint.at_block_begin(self.named_sequence.body),
             self.mlir_context,
@@ -101,7 +81,6 @@ class MlirImplementer(MlirModule, ABC):
                     transform.AnyOpType.get(), handle, pass_name=p
                 )
             transform.YieldOp([])
-            self.schedule = True
 
     @abstractmethod
     def np_inputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:

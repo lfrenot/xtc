@@ -8,7 +8,9 @@ from mlir.ir import (
     FunctionType,
     F64Type,
     IntegerType,
+    UnitAttr,
 )
+from mlir.dialects import transform
 import numpy as np
 
 
@@ -42,6 +44,39 @@ class MlirModule:
         self.local_functions[str(name)] = payload_func
         return payload_func
 
+    def check_consistency(self):
+        return
+
+    def _implement(self):
+        transform.YieldOp([])
+        return
+    
+    def implement(self, measure):
+        self.check_consistency()
+        #
+        if measure:
+            self.measure_execution_time(
+                entry_function_name="entry",
+                measured_function_name=self.payload_name,
+            )
+        #
+        with InsertionPoint(self.mlir_module.body), self.mlir_context, self.loc:
+            self.mlir_module.operation.attributes[
+                "transform.with_named_sequence"
+            ] = UnitAttr.get()
+            self.named_sequence = transform.NamedSequenceOp(
+                "__transform_main",
+                [transform.AnyOpType.get()],
+                [],
+                arg_attrs=[{"transform.readonly": UnitAttr.get()}],
+            )
+        with (
+            InsertionPoint.at_block_begin(self.named_sequence.body),
+            self.mlir_context,
+            self.loc,
+        ):
+            self._implement()
+    
     def add_external_function(
         self,
         name: str,
