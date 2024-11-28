@@ -12,10 +12,13 @@ from mlir.ir import (
 )
 from mlir.dialects import transform
 import numpy as np
+from xdsl_aux import brand_inputs_with_noalias
 
 
 class MlirModule:
-    def __init__(self, xdsl_func: xdslfunc.FuncOp):
+    def __init__(self, xdsl_func: xdslfunc.FuncOp, no_alias: bool):
+        if no_alias:
+            brand_inputs_with_noalias(xdsl_func)
         self.ctx = Context()
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp(loc=self.loc)

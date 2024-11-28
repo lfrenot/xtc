@@ -186,7 +186,7 @@ def main():
             no_alias = args.no_alias,
         )
     else:
-        impl_module = MlirModule(xdsl_func=myfunc)
+        impl_module = MlirModule(xdsl_func=myfunc,no_alias = args.no_alias)
 
     # Apply the transform script
     compiler = MlirCompiler(
