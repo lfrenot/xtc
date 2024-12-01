@@ -45,10 +45,13 @@ class Implementer:
     @property
     def payload_name(self):
         return self._payload_name
-        
+
+    def implement(self):
+        pass
+    
     def _update_loops(self):
         loops = dict()
-        parallels = []
+        parallels = []attribute unroll loop mlir
         for tile_level in range(len(max(self.tiles.values(),key=len))):
             for (k,v) in self.tiles.items():
                 if tile_level >= len(v):

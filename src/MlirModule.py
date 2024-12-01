@@ -14,17 +14,11 @@ from mlir.dialects import transform
 import numpy as np
 from xdsl_aux import brand_inputs_with_noalias
 
-
-class MlirModule:
-    def __init__(self, xdsl_func: xdslfunc.FuncOp, no_alias: bool):
-        if no_alias:
-            brand_inputs_with_noalias(xdsl_func)
+class RawMlirModule:
+    def __init__(self,source: str):
         self.ctx = Context()
         self.loc = Location.unknown(self.ctx)
-        self.module = builtin.ModuleOp(loc=self.loc)
-        self.local_functions = {}
-        self.parse_and_add_function(str(xdsl_func))
-        self.payload_name = str(xdsl_func.sym_name).replace('"', "")
+        self.module = builtin.ModuleOp.parse(source,context=self.ctx)
 
     @property
     def mlir_context(self):
@@ -33,6 +27,15 @@ class MlirModule:
     @property
     def mlir_module(self):
         return self.module
+
+class MlirModule(RawMlirModule):
+    def __init__(self, xdsl_func: xdslfunc.FuncOp, no_alias: bool):
+        super().__init__("module{}")
+        if no_alias:
+            brand_inputs_with_noalias(xdsl_func)
+        self.local_functions = {}
+        self.parse_and_add_function(str(xdsl_func))
+        self.payload_name = str(xdsl_func.sym_name).replace('"', "")
 
     def parse_and_add_function(
         self,
@@ -54,7 +57,7 @@ class MlirModule:
         transform.YieldOp([])
         return
     
-    def implement(self, measure):
+    def implement(self, measure=False):
         self.check_consistency()
         #
         if measure:
