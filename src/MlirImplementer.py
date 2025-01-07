@@ -68,7 +68,7 @@ class MlirImplementer(MlirModule, ABC):
         pass
 
     @override
-    def _implement(self, measure=True):
+    def _implement(self):
         with (
             InsertionPoint.at_block_begin(self.named_sequence.body),
             self.mlir_context,

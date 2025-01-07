@@ -57,14 +57,8 @@ class MlirModule(RawMlirModule):
         transform.YieldOp([])
         return
     
-    def implement(self, measure=False):
+    def implement(self):
         self.check_consistency()
-        #
-        if measure:
-            self.measure_execution_time(
-                entry_function_name="entry",
-                measured_function_name=self.payload_name,
-            )
         #
         with InsertionPoint(self.mlir_module.body), self.mlir_context, self.loc:
             self.mlir_module.operation.attributes[
@@ -101,11 +95,9 @@ class MlirModule(RawMlirModule):
             )
             return myfunc
 
-    def measure_execution_time(
-        self,
-        entry_function_name: str,
-        measured_function_name: str,
-    ):
+    def measure_execution_time(self):
+        entry_function_name = "entry"
+        measured_function_name = self.payload_name
         measured_function = self.local_functions[measured_function_name]
         # Create the external helpers (these ones are provided by MLIR library)
         f64 = F64Type.get(context=self.mlir_context)

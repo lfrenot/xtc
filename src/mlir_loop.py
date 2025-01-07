@@ -208,8 +208,11 @@ def main():
     else:
         impl_module = MlirModule(xdsl_func=myfunc,no_alias = args.no_alias)
 
+    if args.evaluate:
+        impl_module.measure_execution_time()
+
     # Apply the transform script
-    impl_module.implement(measure=args.evaluate)
+    impl_module.implement()
     compiler = MlirCompiler(
         mlir_module=impl_module,
         mlir_install_dir=args.llvm_dir,
