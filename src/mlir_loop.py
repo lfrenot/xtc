@@ -2,7 +2,13 @@
 
 import argparse
 import os
-from xdsl.dialects import func, linalg
+from xdsl.dialects import (
+    func,
+    builtin
+)
+from xdsl.ir import (
+    Operation,
+)
 from xdsl_aux import parse_xdsl_module
 from MlirModule import MlirModule
 from MlirNodeImplementer import MlirNodeImplementer
@@ -11,15 +17,7 @@ from MlirCompiler import MlirCompiler
 
 DEFAULT_LLVM_DIR = "/home/hpompougnac/bin/llvm"
 
-def xdsl_parse(source_path: str):
-    if not os.path.exists(source_path):
-        parser.error(f"{source_path} does not exist.")
-    with open(source_path, 'r') as f:
-        source = f.read()
-    module = parse_xdsl_module(source)
-    return module
-
-def select_xdsl_payload(module):
+def select_xdsl_payload(module: builtin.ModuleOp) -> func.FuncOp:
     myfunc = None
     for o in module.walk():
         if isinstance(o,func.FuncOp):
@@ -28,7 +26,7 @@ def select_xdsl_payload(module):
     assert(myfunc)
     return myfunc
 
-def operations_to_schedule(myfunc):
+def operations_to_schedule(myfunc: func.FuncOp) -> list[Operation]:
     annotated_operations = []
     for o in myfunc.walk():
         for attr_name in o.attributes:
@@ -37,25 +35,39 @@ def operations_to_schedule(myfunc):
                 break
     return annotated_operations
 
-def schedule_operation(o,implementer_name,always_vectorize,concluding_passes,no_alias):
-    dims = dict()
-    parallel_dims = []
-    reduction_dims = []
+def extract_string_list_from_attr(o: Operation, attr_name: str) -> list[str]:
+    extracted_list = []
+    if attr_name in o.attributes:
+        raw_list = o.attributes[attr_name]
+        assert isinstance(raw_list,builtin.ArrayAttr)
+        for d in raw_list.data:
+            assert isinstance(d,builtin.StringAttr)
+            extracted_list.append(d.data)
+    return extracted_list
+
+def extract_string_int_dict_from_attr(o: Operation, attr_name: str) -> dict[str,int]:
+    extracted_dict = {}
+    if attr_name in o.attributes:
+        raw_dict = o.attributes[attr_name].data
+        assert isinstance(raw_dict,dict)
+        for string,integer in raw_dict.items():
+            assert isinstance(string,str) and  isinstance(integer,builtin.IntegerAttr)
+            extracted_dict[string] = integer.value.data
+    return extracted_dict
+
+def schedule_operation(
+    o: Operation,
+    implementer_name: str,
+    always_vectorize: bool,
+    concluding_passes: list[str],
+    no_alias: bool,
+):
     # Parse the initial specification
-    for attr_name in o.attributes:
-        for name,size in o.attributes["loop.dims"].data.items():
-            dims[name] = size.value.data
-        if "loop.parallel_dims" in o.attributes:
-            for d in o.attributes["loop.parallel_dims"].data:
-                parallel_dims.append(d.data)
-        if "loop.reduction_dims" in o.attributes:
-            for d in o.attributes["loop.reduction_dims"].data:
-                reduction_dims.append(d.data)
-    #
-    loop_stamps = []
-    if "loop.add_attributes" in o.attributes:
-        for stamp in o.attributes["loop.add_attributes"].data:
-            loop_stamps.append(stamp.data)
+    dims = extract_string_int_dict_from_attr(o,"loop.dims")
+    assert dims
+    parallel_dims = extract_string_list_from_attr(o,"loop.parallel_dims")
+    reduction_dims = extract_string_list_from_attr(o,"loop.reduction_dims")
+    loop_stamps = extract_string_list_from_attr(o,"loop.add_attributes")
 
     impl = MlirNodeImplementer(
         source_op = o,
@@ -68,35 +80,29 @@ def schedule_operation(o,implementer_name,always_vectorize,concluding_passes,no_
         loop_stamps = loop_stamps,
         no_alias = no_alias,
     )
-    # Parse the scheduling attributes
+
+    # Parse and process the tiling declarations
+    tiles_sizes = extract_string_int_dict_from_attr(o,"loop.tiles_sizes")
     if "loop.tiles_names" in o.attributes:
         for dim,ts in o.attributes["loop.tiles_names"].data.items():
             tiles_on_dim = {}
             for t in ts:
-                t = t.data
-                size = o.attributes["loop.tiles_sizes"].data[t].value.data
-                tiles_on_dim[t] = size
+                size = tiles_sizes[t.data]
+                tiles_on_dim[t.data] = size
             impl.tile(dim,tiles_on_dim)
-    if "loop.interchange" in o.attributes:
-        interchange = []
-        for d in o.attributes["loop.interchange"].data:
-            interchange.append(d.data)
+
+    # Parse the scheduling attributes
+    interchange = extract_string_list_from_attr(o,"loop.interchange")
+    vectorize = extract_string_list_from_attr(o,"loop.vectorize")
+    parallelize = extract_string_list_from_attr(o,"loop.parallelize")
+    unroll = extract_string_int_dict_from_attr(o,"loop.unroll")
+
+    # Feed the scheduler
+    if interchange:
         impl.interchange(interchange)
-    if "loop.vectorize" in o.attributes:
-        vectorize = []
-        for d in o.attributes["loop.vectorize"].data:
-            vectorize.append(d.data)
-        impl.vectorize(vectorize)
-    if "loop.parallelize" in o.attributes:
-        parallelize = []
-        for d in o.attributes["loop.parallelize"].data:
-            parallelize.append(d.data)
-        impl.parallelize(parallelize)
-    if "loop.unroll" in o.attributes:
-        unroll = {}
-        for name,size in o.attributes["loop.unroll"].data.items():
-            unroll[name] = size.value.data
-        impl.unroll(unroll)
+    impl.vectorize(vectorize)
+    impl.parallelize(parallelize)
+    impl.unroll(unroll)
 
     return impl
 
@@ -177,7 +183,11 @@ def main():
 
     args = parser.parse_args()
 
-    module = xdsl_parse(args.filename)
+    if not os.path.exists(args.filename):
+        parser.error(f"{args.filename} does not exist.")
+    with open(args.filename, 'r') as f:
+        source = f.read()
+    module = parse_xdsl_module(source)
     myfunc = select_xdsl_payload(module)
     annotated_operations = operations_to_schedule(myfunc)
     if len(annotated_operations) > 0:
