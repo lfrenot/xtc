@@ -62,6 +62,12 @@ def schedule_operation(
     concluding_passes: list[str],
     no_alias: bool,
 ):
+    parsed_id = None
+    for attr_name in o.attributes:
+        if attr_name.startswith('__'):
+            assert parsed_id is None
+            parsed_id = attr_name
+        
     # Parse the initial specification
     dims = extract_string_int_dict_from_attr(o,"loop.dims")
     assert dims
@@ -79,6 +85,7 @@ def schedule_operation(
         concluding_passes = concluding_passes,
         loop_stamps = loop_stamps,
         no_alias = no_alias,
+        id = parsed_id
     )
 
     # Parse and process the tiling declarations
