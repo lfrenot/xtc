@@ -399,7 +399,6 @@ def tile_strategy_7d(impl, op_args, in_x):
     impl.vectorize(vector_axes)
     impl.unroll(unroll_axes)
 
-
 def tile_strategy_7d_wc(impl, op_args, in_x):
     # TODO: generalize: no need to be matmul specific as soon as
     # we have axes names
@@ -564,7 +563,10 @@ def tile_generator_8dvr(op_args, size=None):
         yield np.hstack((sample, [1]))
 
 def get_eval_parameters(args):
-    NDArray.set_alloc_alignment(2*1024*1024) # 2MB to catch Huge Pages if THB is one
+    if args.huge_pages:
+        NDArray.set_alloc_alignment(2*1024*1024) # 2MB to catch Huge Pages if THB is one
+    else:
+        NDArray.set_alloc_alignment(256)         # default align to 256 bytes as DLPack
     dims_names = OPERATORS[args.operator]["dims"]
     dims_map = {k: v for k, v in zip(dims_names, args.dims)}
     dtype = DTYPES_MAP[args.dtype]
@@ -588,7 +590,7 @@ def get_eval_parameters(args):
 
 def get_all_impls(op_args, args):
     return [
-        (backend, OPERATORS[args.operator]["backends"][backend]["operation"](*op_args))
+        (backend, OPERATORS[args.operator]["backends"][backend]["operation"](*op_args, name=args.func_name))
         for backend in args.backends
     ]
 
@@ -616,6 +618,7 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
         shared_lib=True,
         dump_file=dump_file,
         no_entry=True,
+        bare_ptr=args.bare_ptr,
     )
     if args.dump:
         compile_args.update(dict(
@@ -648,6 +651,7 @@ def load_and_evaluate_one(ident, backend, compiler, dump_file, in_x, args, callb
         validate=args.validate,
         parameters=args.eval_parameters,
         reference=reference_matmul,
+        bare_ptr=args.bare_ptr,
     )
     if not args.save_temps:
         Path(payload_lib).unlink()
@@ -1040,11 +1044,13 @@ def main():
         description="Autotune Matmult",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--operator", type=str, choices=list(OPERATORS.keys()), default="matmul", help="operator to optimize")
+    parser.add_argument("--func-name", type=str, default="matmul", help="function name to generate")
     parser.add_argument("--strategy", type=str, choices=list(STRATEGIES.keys()), default="tile3d", help="tile strategy to use")
     parser.add_argument("--search", type=str, choices=["random", "exhaustive", "data"], default="random", help="search strategy")
     parser.add_argument("--backends", type=str, nargs="+", choices=["mlir", "tvm", "xdsl", "jir"], default=["mlir"], help="backends to use")
     parser.add_argument("--data", type=str, help="data CSV file for input to data search")
     parser.add_argument("--dims", nargs="+", type=int, default=OPERATORS["matmul"]["default_dims"], help="dimensions")
+    parser.add_argument("--huge-pages", action=argparse.BooleanOptionalAction, default=True, help="alloc at huge page boundaries")
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
     parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
@@ -1061,6 +1067,7 @@ def main():
     parser.add_argument("--save-temps-dir", type=str, default="./save_temps_dir", help="save temps dir")
     parser.add_argument("--explore-dir", type=str, default=".", help="exploration results .so dir")
     parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
+    parser.add_argument("--bare-ptr", action=argparse.BooleanOptionalAction, default=False, help="use bare pointer interface (for TVM backend)")
     parser.add_argument("--jobs", type=int, default=default_jobs, help="parallel compile jobs")
     parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
     parser.add_argument("--mlir-prefix", type=str, help="MLIR install prefix, defaults to mlir package")
