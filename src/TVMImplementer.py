@@ -209,8 +209,8 @@ class Scheduler:
             if self.parallelization:
                 if self.parallelization[0] in tilings:
                     if len(self.parallelization) > 1:
-                        print(f"{self.parallelization[0]} = {sch}[{tens}].fuse({', '.join(self.parallelization)})", file=outf)
-                    print(f"{sch}[{tens}].parallel({self.parallelization[0]})", file=outf)
+                        print(f"{self.parallelization[-1]} = {sch}[{tens}].fuse({', '.join(self.parallelization)})", file=outf)
+                    print(f"{sch}[{tens}].parallel({self.parallelization[-1]})", file=outf)
 
     def dump_schedule(self, obj=None, outf=sys.stdout):
         if obj is None:
