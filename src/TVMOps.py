@@ -6,6 +6,7 @@ __all__ = [
     "Operators",
     "Operator",
     "OperatorMatmul",
+    "OperatorRelu",
 ]
 
 import tvm
@@ -68,9 +69,10 @@ def tvm_build_crt(sch, operation, target, name=None):
     )
 
 class Operation():
-    def __init__(self, operator, args, name=None, target=None):
-        self.operator = operator
+    def __init__(self, operator, args, attrs={}, name=None, target=None):
+        self.operator = operator(args, attrs, name=name)
         self.args = args
+        self.attrs = attrs
         if target is not None:
             self.target_options = ""
             self.target = target
@@ -82,7 +84,7 @@ class Operation():
         self.name = self.operator.name if name is None else name
 
     def generate(self) -> tuple:
-        return self.operator.generate_op(*self.args)
+        return self.operator.generate_op()
 
     def schedule(self, operation: tuple, schedule: str = "") -> Any:
         sch = te.create_schedule(operation[-1].op)
@@ -111,7 +113,8 @@ class Operation():
                 "shape": shape,
                 "dtype": dtype,
             }
-            for shape, dtype in zip(self.operator.inputs_dims(*self.args), self.operator.inputs_types(*self.args))
+            for shape, dtype
+            in zip(self.operator.inputs_dims(), self.operator.inputs_types())
         ]
         return inputs_spec
 
@@ -121,7 +124,8 @@ class Operation():
                 "shape": shape,
                 "dtype": dtype,
             }
-            for shape, dtype in zip(self.operator.outputs_dims(*self.args), self.operator.outputs_types(*self.args))
+            for shape, dtype
+            in zip(self.operator.outputs_dims(), self.operator.outputs_types())
         ]
         return outputs_spec
 
@@ -130,48 +134,89 @@ class Operation():
 
 
 class Operator():
-    name = "undef"
-    @staticmethod
-    def generate_op(i, j, k, dtype):
+    DEFAULT_NAME = "undef"
+    def __init__(self, args, attrs, name=None):
+        self.args = tuple(args)
+        self.attrs = {**attrs}
+        self.name = name if name is not None else self.DEFAULT_NAME
+    def generate_op(self):
         raise Exception("unimplemneted")
 
 
 class OperatorMatmul(Operator):
-    name = "matmul"
-    @staticmethod
-    def generate_op(i, j, k, dtype, name=None):
-        name = name if name is not None else OperatorMatmul.name
+    DEFAULT_NAME = "matmul"
+    def generate_op(self):
+        i, j, k, dtype = self.args
         A = te.placeholder((i, k), name="A")
         B = te.placeholder((k, j), name="B")
-
         k = te.reduce_axis((0, k), "k")
         O = te.compute(
             (i, j),
             lambda i, j: te.sum(A[i, k] * B[k, j], axis=k),
             attrs={"layout_free_placeholders": [B]},
-            name=name,
+            name=self.name,
         )
         return A, B, O
 
-    @staticmethod
-    def inputs_dims(i, j, k, dtype):
+    def inputs_dims(self):
+        i, j, k, dtype = self.args
         return (i, k), (k, j)
 
-    @staticmethod
-    def inputs_types(i, j, k, dtype):
+    def inputs_types(self):
+        i, j, k, dtype = self.args
         return dtype, dtype
 
-    @staticmethod
-    def outputs_dims(i, j, k, dtype):
+    def outputs_dims(self):
+        i, j, k, dtype = self.args
         return (i, j),
 
-    @staticmethod
-    def outputs_types(i, j, k, dtype):
+    def outputs_types(self):
+        i, j, k, dtype = self.args
         return dtype,
 
-    @staticmethod
-    def reference_impl(*args):
+    def reference_impl(self, *args):
         np.matmul(args[0], args[1], out=args[2])
+
+
+class OperatorRelu(Operator):
+    DEFAULT_NAME = "relu"
+    DEFAULT_THRESHOLD = 0
+    def __init__(self, args, attrs, name=None):
+        attrs = {
+            "threshold": self.DEFAULT_THRESHOLD,
+            **attrs
+        }
+        super().__init__(args, attrs, name)
+
+    def generate_op(self):
+        i, dtype = self.args
+        A = te.placeholder((i,), name="A")
+        O = te.compute(
+            (i,),
+            lambda i,: tvm.tir.max(self.attrs["threshold"], A[i]),
+            name=self.name,
+        )
+        return A, O
+
+    def inputs_dims(self):
+        i, dtype = self.args
+        return (i,),
+
+    def inputs_types(self):
+        i, dtype = self.args
+        return dtype,
+
+    def outputs_dims(self):
+        i, dtype = self.args
+        return (i,),
+
+    def outputs_types(self):
+        i, dtype = self.args
+        return dtype,
+
+    def reference_impl(self, *args):
+        np.maximum(args[0], self.attrs["threshold"], out=args[1])
 
 class Operators():
     matmul = OperatorMatmul
+    relu = OperatorRelu

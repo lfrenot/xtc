@@ -75,8 +75,11 @@ import runtime
 
 logger = logging.getLogger(__name__)
 
-def reference_matmul(a, b, c):
-    np.matmul(a, b, out=c)
+def reference_matmul(a, b, o):
+    np.matmul(a, b, out=o)
+
+def reference_relu(a, o):
+    np.maximum(a, 0, out=o)
 
 def xdsl_matmul_graph(i, j, k, ftype, name="matmul"):
     from xdsl.dialects import func, linalg, arith, builtin
@@ -139,7 +142,7 @@ def xdsl_matmul_graph(i, j, k, ftype, name="matmul"):
     }
     return graph
 
-def mlir_matmul_impl(i, j, k, ftype, graph, args):
+def mlir_matmul_impl(i, j, k, ftype, graph):
     from xdsl.ir import Block, Region
     from xdsl.dialects.builtin import FunctionType, MemRefType, f32, f64
     from xdsl.dialects import func
@@ -193,7 +196,7 @@ def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
         }
     }
 
-def tvm_matmul_impl(i, j, k, ftype, graph, args):
+def tvm_matmul_impl(i, j, k, ftype, graph):
     import TVMImplementer
     node = graph["nodes"]["matmul"]
     impl = TVMImplementer.Implementer(
@@ -223,7 +226,7 @@ def jir_matmul_graph(i, j, k, ftype, name="matmul"):
         }
     }
 
-def jir_matmul_impl(i, j, k, ftype, graph, args):
+def jir_matmul_impl(i, j, k, ftype, graph):
     import JIRImplementer
     node = graph["nodes"]["matmul"]
     # TODO: MLIR JIR install dirs
@@ -238,6 +241,68 @@ def jir_matmul_impl(i, j, k, ftype, graph, args):
     compiler = impl
     node_scheduler = impl.get_scheduler()
     return compiler, node_scheduler, node_scheduler, node["op"], "jir"
+
+def tvm_relu_graph(i, ftype, threshold=0, name=None):
+    import TVMImplementer
+    relu = TVMImplementer.Operation(
+        TVMImplementer.Operators.relu,
+        (i, DTYPES_MAP[ftype]),
+        name=name,
+    )
+    return {
+        "nodes": {
+            "relu": {
+                "dims": {'i': i},
+                "parallel_dims": ['i'],
+                "op": relu,
+            }
+        }
+    }
+
+def tvm_relu_impl(i, ftype, graph):
+    import TVMImplementer
+    node = graph["nodes"]["relu"]
+    impl = TVMImplementer.Implementer(
+        source_op=node["op"],
+        dims=node["dims"],
+        parallel_dims=node["parallel_dims"],
+    )
+    compiler = impl
+    node_scheduler = impl.get_scheduler()
+    return compiler, node_scheduler, node_scheduler, node["op"], "tvm"
+
+def tile_strategy_1d(impl, op_args, in_x):
+    i, dtype = op_args
+    tiles_i = utils.factors_to_sizes(in_x[0:1])
+    tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
+    axes_order = ["i", "i1"]
+    vector_axes = axes_order[-1:]
+    parallel_axes = []
+    if THREADS > 1:
+        parallel_axes = axes_order[:1]
+    unroll_axes = {}
+    logger.debug(
+        "input: %s: tile i: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
+        in_x, tiles_i_dict,
+        axes_order, vector_axes, parallel_axes, unroll_axes)
+    impl.tile("i", tiles_i_dict)
+    impl.interchange(axes_order)
+    if parallel_axes:
+        impl.parallelize(parallel_axes)
+    if vector_axes:
+        impl.vectorize(vector_axes)
+    if unroll_axes:
+        impl.unroll(unroll_axes)
+
+def tile_schedule_default_1d(opt_level, op_args):
+    i, dtype = op_args
+    default_schedule = [1, 1, 1]
+    if opt_level >= 3:
+        tile = VEC_SIZE
+        div = i >= tile and i % tile == 0
+        if div:
+            default_schedule = [tile]
+    return default_schedule
 
 def tile_strategy_3d(impl, op_args, in_x):
     # TODO: generalize: no need to be matmul specific as soon as
@@ -281,6 +346,16 @@ def tile_schedule_default_3d(opt_level, op_args):
         if idiv and jdiv and kdiv:
             default_schedule = [itile, jtile, ktile]
     return default_schedule
+
+def tile_generator_1d(op_args, size=None):
+    i, dtype = op_args
+    tiles_i = [t[0] for t in utils.factors_enumeration(i, 1)]
+    all_tiles = [tiles_i]
+    all_in_x = list(itertools.product(*all_tiles))
+    logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}")
+    all_in_x = [x for x in all_in_x if x[0]/min(x[0], VEC_SIZE) <= MAX_UNROLL]
+    logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}")
+    return np.array(all_in_x)
 
 def tile_generator_3d(op_args, size=None):
     i, j, k, dtype = op_args
@@ -590,7 +665,10 @@ def get_eval_parameters(args):
 
 def get_all_impls(op_args, args):
     return [
-        (backend, OPERATORS[args.operator]["backends"][backend]["operation"](*op_args, name=args.func_name))
+        (
+            backend,
+            OPERATORS[args.operator]["backends"][backend]["operation"](*op_args, name=args.func_name)
+        )
         for backend in args.backends
     ]
 
@@ -607,7 +685,10 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
     assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
     implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
-    compiler, scheduler, node_scheduler, source_op, backend_name = implementer(*op_args, operation, args)
+    compiler, scheduler, node_scheduler, source_op, backend_name = implementer(
+        *op_args,
+        operation
+    )
     assert backend_name == backend
     tile_strategy(node_scheduler, op_args, in_x)
     schedule = scheduler.implement()
@@ -642,6 +723,7 @@ def load_and_evaluate_one(ident, backend, compiler, dump_file, in_x, args, callb
     logger.debug("Evaluate: %s: %s...", ident, in_x)
     payload_lib = f"{dump_file}.so"
     payload_name = compiler.payload_name
+    reference_impl = OPERATORS[args.operator]["reference_impl"]
     stdout = compiler.load_and_evaluate(
         payload_lib,
         payload_name,
@@ -650,7 +732,7 @@ def load_and_evaluate_one(ident, backend, compiler, dump_file, in_x, args, callb
         min_repeat_ms=args.min_repeat_ms,
         validate=args.validate,
         parameters=args.eval_parameters,
-        reference=reference_matmul,
+        reference=reference_impl,
         bare_ptr=args.bare_ptr,
     )
     if not args.save_temps:
@@ -947,6 +1029,7 @@ OPERATORS = {
         "default_type": "f32",
         "inputs": [["i", "k"], ["k", "j"]],
         "outputs": [["i", "j"]],
+        "reference_impl": reference_matmul,
         "backends": {
             "mlir": {
                 "operation": xdsl_matmul_graph,
@@ -961,10 +1044,44 @@ OPERATORS = {
                 "implementer": jir_matmul_impl,
             },
         },
+        "default_strategy": "tile3d",
+        "strategies": {
+            "tile3d",
+            "tile4d",
+            "tile4dv",
+            "tile7d",
+            "tile7dv",
+            "tile7dvr",
+            "tile8d",
+            "tile8dvr",
+        },
+    },
+    "relu": {
+        "dims": ["i"],
+        "default_dims": [512*1024],
+        "default_type": "f32",
+        "inputs": [["i"]],
+        "outputs": [["i"]],
+        "reference_impl": reference_relu,
+        "backends": {
+            "tvm": {
+                "operation": tvm_relu_graph,
+                "implementer": tvm_relu_impl,
+            },
+        },
+        "default_strategy": "tile1d",
+        "strategies": {
+            "tile1d",
+        },
     },
 }
 
 STRATEGIES = {
+    "tile1d": {
+        "strategy": tile_strategy_1d,
+        "generator": tile_generator_1d,
+        "schedule": tile_schedule_default_1d,
+    },
     "tile3d": {
         "strategy": tile_strategy_3d,
         "generator": tile_generator_3d,
@@ -1038,7 +1155,7 @@ def launch_child(argv, args):
         args=cmd,
     )
     if proc.returncode != 0:
-        print(f"ERROR: running subprocess: exit code: {proc.returncode}: {' '.join(cmd)}", file=sys.stderr)
+        logger.debug(f"ERROR: running subprocess: exit code: %s, command: %s", proc.returncode, ' '.join(cmd))
     raise SystemExit(proc.returncode)
 
 
@@ -1049,16 +1166,16 @@ def main():
         description="Autotune Matmult",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--operator", type=str, choices=list(OPERATORS.keys()), default="matmul", help="operator to optimize")
-    parser.add_argument("--func-name", type=str, default="matmul", help="function name to generate")
-    parser.add_argument("--strategy", type=str, choices=list(STRATEGIES.keys()), default="tile3d", help="tile strategy to use")
+    parser.add_argument("--func-name", type=str, help="function name to generate, default to operator")
+    parser.add_argument("--strategy", type=str, choices=list(STRATEGIES.keys()), help="tile strategy to use, default to operator's default")
     parser.add_argument("--search", type=str, choices=["random", "exhaustive", "data"], default="random", help="search strategy")
     parser.add_argument("--backends", type=str, nargs="+", choices=["mlir", "tvm", "xdsl", "jir"], default=["mlir"], help="backends to use")
     parser.add_argument("--data", type=str, help="data CSV file for input to data search")
-    parser.add_argument("--dims", nargs="+", type=int, default=OPERATORS["matmul"]["default_dims"], help="dimensions")
+    parser.add_argument("--dims", nargs="+", type=int, help="dimensions, default to operators's default")
     parser.add_argument("--huge-pages", action=argparse.BooleanOptionalAction, default=True, help="alloc at huge page boundaries")
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
     parser.add_argument("--opt-level", type=int, default=4, help="opt level, 0-3 one-shot, 4 search")
-    parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
+    parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), help="data type, default to operator's default")
     parser.add_argument("--trials", type=int, default=100, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
     parser.add_argument("--max-unroll", type=int, default=default_unroll, help="max unroll in tiling strategies")
@@ -1089,6 +1206,22 @@ def main():
 
     if not args.child:
         launch_child(sys.argv, args)
+
+    if not args.func_name:
+        args.func_name = args.operator
+    if not args.strategy:
+        args.strategy = OPERATORS[args.operator]["default_strategy"]
+    if not args.dims:
+        args.dims=OPERATORS[args.operator]["default_dims"]
+    if not args.dtype:
+        args.dtype = OPERATORS[args.operator]["default_type"]
+
+    assert args.strategy in OPERATORS[args.operator]["strategies"], \
+        f"strategy {args.strategy} not available for operator {args.operator}"
+
+    for backend in args.backends:
+        assert backend in OPERATORS[args.operator]["backends"], \
+            f"backend {backend} not available for operator {args.operator}"
 
     if args.seed >= 0:
         np.random.seed(args.seed)
