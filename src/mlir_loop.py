@@ -49,7 +49,6 @@ def extract_string_int_dict_from_attr(o: Operation, attr_name: str) -> dict[str,
     extracted_dict = {}
     if attr_name in o.attributes:
         raw_dict = o.attributes[attr_name].data
-        assert isinstance(raw_dict,dict)
         for string,integer in raw_dict.items():
             assert isinstance(string,str) and  isinstance(integer,builtin.IntegerAttr)
             extracted_dict[string] = integer.value.data
