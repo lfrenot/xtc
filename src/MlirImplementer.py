@@ -2,14 +2,12 @@ from abc import ABC, abstractmethod
 from typing_extensions import override
 from mlir.ir import (
     InsertionPoint,
-    UnitAttr,
 )
 from mlir.dialects import transform
 from xdsl.dialects import func as xdslfunc
 from mlir.dialects.transform import (
     structured,
     vector,
-    memref,
     get_parent_op,
 )
 
@@ -38,9 +36,6 @@ class MlirImplementer(MlirModule, ABC):
     def generate_vectorization(self, handle):
         if self.always_vectorize or self.needs_vectorization():
             handle = structured.VectorizeChildrenAndApplyPatternsOp(handle)
-            # with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
-            #     memref.ApplyFoldMemrefAliasOpsPatternsOp()
-            # handle = structured.HoistRedundantVectorTransfersOp(target=handle,transformed=transform.AnyOpType.get())
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()
                 vector.ApplyLowerContractionPatternsOp()
