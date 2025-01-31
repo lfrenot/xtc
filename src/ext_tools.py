@@ -72,7 +72,6 @@ cc_bin = "cc"
 
 objdump_opts = [
     '-dr',
-    '-Mintel',
     '--no-addresses',
     '--no-show-raw-insn',
     '--visualize-jumps'

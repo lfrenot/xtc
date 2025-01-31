@@ -68,7 +68,14 @@ def schedule_operation(
             parsed_id = attr_name
         
     # Parse the initial specification
-    dims = extract_string_int_dict_from_attr(o,"loop.dims")
+    if "loop.dims" in o.attributes:
+        dims = extract_string_int_dict_from_attr(o,"loop.dims")
+    elif "loop.tiles_names" in o.attributes:
+        dims = []
+        for dim,ts in o.attributes["loop.tiles_names"].data.items():
+            dims += [dim]
+    else:
+        assert False
     assert dims
     parallel_dims = extract_string_list_from_attr(o,"loop.parallel_dims")
     reduction_dims = extract_string_list_from_attr(o,"loop.reduction_dims")
@@ -203,8 +210,6 @@ def main():
         for o in annotated_operations:
             implementer_name = f"v{count}"
             count += 1
-            # TODO these names may be generated
-            assert "loop.dims" in o.attributes, "An annotated operation must declare its dimensions names"
             impl = schedule_operation(
                 o,
                 implementer_name,
