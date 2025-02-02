@@ -25,7 +25,7 @@ class MlirNodeImplementer(MlirImplementer):
     def __init__(
         self,
         source_op: xdslOperation,
-        dims: list[str],
+        dims: dict[str, int | None],
         parallel_dims: list[str],
         reduction_dims: list[str],
         payload_name: str = "f",
@@ -54,7 +54,7 @@ class MlirNodeImplementer(MlirImplementer):
         self.source_op = source_op
         # Specification of transformations
         self.loop_stamps = loop_stamps
-        self.dims = dims
+        self.dims = list(dims.keys())
         self.parallel_dims = parallel_dims
         self.reduction_dims = reduction_dims
         self.tiles = {k: {k: 1} for k in self.dims}

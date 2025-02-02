@@ -68,12 +68,13 @@ def schedule_operation(
             parsed_id = attr_name
         
     # Parse the initial specification
+    dims: dict[str,int|None] = {}
     if "loop.dims" in o.attributes:
-        dims = extract_string_int_dict_from_attr(o,"loop.dims")
+        for k,v in extract_string_int_dict_from_attr(o,"loop.dims").items():
+            dims[k] = v
     elif "loop.tiles_names" in o.attributes:
-        dims = []
         for dim,ts in o.attributes["loop.tiles_names"].data.items():
-            dims += [dim]
+            dims[dim] = None
     else:
         assert False
     assert dims
