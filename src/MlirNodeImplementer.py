@@ -25,10 +25,15 @@ class MlirNodeImplementer(MlirImplementer):
     def __init__(
         self,
         source_op: xdslOperation,
+        payload_name: str = "f",
+            
+        # TODO: Should become a list.
         dims: dict[str, int | None],
+            
+        # TODO: Useless. Should be removed.
         parallel_dims: list[str],
         reduction_dims: list[str],
-        payload_name: str = "f",
+            
         concluding_passes: list[str] = [],
         loop_stamps: list[str] = [],
         always_vectorize: bool = True,
@@ -55,8 +60,6 @@ class MlirNodeImplementer(MlirImplementer):
         # Specification of transformations
         self.loop_stamps = loop_stamps
         self.dims = list(dims.keys())
-        self.parallel_dims = parallel_dims
-        self.reduction_dims = reduction_dims
         self.tiles = {k: {k: 1} for k in self.dims}
         self.permutation = self.get_default_interchange()
         self.vectorization = []
@@ -102,10 +105,6 @@ class MlirNodeImplementer(MlirImplementer):
         for d, s in zip(dims, sizes):
             self.tiles[dim][d] = s
         self.permutation = self.get_default_interchange()
-        if dim in self.parallel_dims:
-            self.parallel_dims += tiles_names
-        if dim in self.reduction_dims:
-            self.reduction_dims += tiles_names
 
     def interchange(self, permutation: list[str]):
         self.permutation = permutation
@@ -149,8 +148,6 @@ class MlirNodeImplementer(MlirImplementer):
                 self.vectorization.append(dim_vect)
 
     def parallelize(self, parallelization: list[str]):
-        for p in parallelization:
-            assert p in self.parallel_dims
         # TODO
         ...
 
