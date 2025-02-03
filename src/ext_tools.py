@@ -3,26 +3,31 @@ transform_opts = [
 ]
 
 lowering_opts = [
-    "canonicalize",
-    "cse",
-    "lower-affine",
-    "convert-vector-to-scf",
-    "convert-linalg-to-loops",
-    "loop-invariant-code-motion",
-    "func.func(buffer-loop-hoisting)",
-    "cse",
-    "sccp",
-    "canonicalize",
-    "convert-scf-to-cf",
-    "convert-vector-to-llvm{enable-x86vector=true}",
-    "convert-math-to-llvm",
+    "canonicalize","cse","sccp",
+    # From complex control to the soup of basic blocks
     "expand-strided-metadata",
     "lower-affine",
+    "convert-linalg-to-loops",
+    "convert-vector-to-scf",
+    "scf-forall-to-parallel",
+    "convert-scf-to-openmp",
+    "canonicalize","cse","sccp",
+    "convert-scf-to-cf",
+    "canonicalize","cse","sccp",
+    # Memory accesses to LLVM
     "buffer-results-to-out-params",
-    "finalize-memref-to-llvm",
     "convert-func-to-llvm{use-bare-ptr-memref-call-conv=true}",
+    "finalize-memref-to-llvm",
+    "canonicalize","cse","sccp",
+    # Data flow to LLVM
+    "convert-vector-to-llvm{enable-x86vector=true}",
     "convert-index-to-llvm",
-    "reconcile-unrealized-casts",
+    "convert-arith-to-llvm",
+    "canonicalize","cse","sccp",
+    # Control flow to LLVM
+    "convert-cf-to-llvm",
+    "convert-openmp-to-llvm",
+    "canonicalize","cse","sccp",
 ]
 
 mlirtranslate_opts = ['--mlir-to-llvmir']

@@ -25,7 +25,6 @@ class MlirNodeImplementer(MlirImplementer):
     def __init__(
         self,
         source_op: xdslOperation,
-        payload_name: str = "f",
             
         # TODO: Should become a list.
         dims: dict[str, int | None],
@@ -33,7 +32,8 @@ class MlirNodeImplementer(MlirImplementer):
         # TODO: Useless. Should be removed.
         parallel_dims: list[str],
         reduction_dims: list[str],
-            
+
+        payload_name: str = "f",
         concluding_passes: list[str] = [],
         loop_stamps: list[str] = [],
         always_vectorize: bool = True,
@@ -148,8 +148,7 @@ class MlirNodeImplementer(MlirImplementer):
                 self.vectorization.append(dim_vect)
 
     def parallelize(self, parallelization: list[str]):
-        # TODO
-        ...
+        self.parallelization = parallelization
 
     def unroll(self, unrolling: dict[str, int]):
         for dim,ufactor in unrolling.items():
