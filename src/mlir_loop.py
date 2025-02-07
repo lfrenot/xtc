@@ -60,6 +60,7 @@ def schedule_operation(
     always_vectorize: bool,
     concluding_passes: list[str],
     no_alias: bool,
+    evaluate: bool
 ):
     parsed_id = None
     for attr_name in o.attributes:
@@ -108,7 +109,10 @@ def schedule_operation(
     # Parse the scheduling attributes
     interchange = extract_string_list_from_attr(o,"loop.interchange")
     vectorize = extract_string_list_from_attr(o,"loop.vectorize")
-    parallelize = extract_string_list_from_attr(o,"loop.parallelize")
+    if evaluate:
+        parallelize = []
+    else:
+        parallelize = extract_string_list_from_attr(o,"loop.parallelize")
     unroll = extract_string_int_dict_from_attr(o,"loop.unroll")
 
     # Feed the scheduler
@@ -217,6 +221,7 @@ def main():
                 always_vectorize=args.always_vectorize,
                 concluding_passes=args.concluding_passes,
                 no_alias=args.no_alias,
+                evaluate = args.evaluate
             )
             impls.append(impl)
 
