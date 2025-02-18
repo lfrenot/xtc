@@ -282,13 +282,13 @@ class MlirNodeImplementer(MlirImplementer):
 
     @override
     def np_inputs_spec(self):
-        list_attr_tys = [i.type for i in self.source_op.operands]
+        list_attr_tys = [i.type for i in self.source_op.inputs]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
     @override
     def np_outputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:
-        list_attr_tys = [i.type for i in self.source_op.results]
+        list_attr_tys = [i.type for i in self.source_op.outputs]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
