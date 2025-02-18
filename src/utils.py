@@ -2,9 +2,12 @@
 Some utilitary and math functions.
 """
 
+import os
 import numpy as np
 import operator
 import ctypes
+import shutil
+from pathlib import Path
 from functools import reduce
 from typing import Dict, List, Union, Tuple, Any
 
@@ -239,3 +242,37 @@ class LibLoader():
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """ Context manager unloads the library """
         self.close()
+
+def get_mlir_prefix(prefix: Path|str|None = None):
+    """
+    Tentatively return the mlir compiler prefix where
+    {prefix}/bin/mlir-opt can be found.
+    Raise on error.
+    Defined in order as:
+    - passed prefix if not None
+    - env var XTC_MLIR_PREFIX
+    - mlir python package prefix if installed
+    - mlir-opt binary prefix in PATH
+    """
+    if prefix is None:
+        prefix_var = os.environ.get("XTC_MLIR_PREFIX")
+        if prefix_var:
+            prefix = Path(prefix_var)
+        else:
+            try:
+                import mlir
+                prefix = Path(mlir.__path__[0])
+            except:
+                mlir_exe = shutil.which("mlir-opt")
+                if mlir_exe:
+                    prefix = Path(mlir_exe).parents[1]
+    else:
+        prefix = Path(prefix)
+    if prefix is None:
+        raise RuntimeError("could not find MLIR installation")
+    if not prefix.exists():
+        raise RuntimeError(f"could not find MLIR prefix at: {prefix}")
+    mlir_opt = prefix / "bin" / "mlir-opt"
+    if not mlir_opt.exists():
+        raise RuntimeError(f"could not find mlir-opt at: {mlir_opt}")
+    return prefix
