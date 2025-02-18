@@ -51,7 +51,7 @@ class Implementer:
     
     def _update_loops(self):
         loops = dict()
-        parallels = []attribute unroll loop mlir
+        parallels = []
         for tile_level in range(len(max(self.tiles.values(),key=len))):
             for (k,v) in self.tiles.items():
                 if tile_level >= len(v):
