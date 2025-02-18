@@ -53,6 +53,7 @@ from pathlib import Path
 
 import utils
 from ndarray import NDArray
+import runtime
 
 logger = logging.getLogger(__name__)
 
@@ -499,11 +500,12 @@ def read_input(fname, args):
 def peak_time(args):
     if not args.execute:
         return 0
-    return utils.cpu_peak_time(
-        utils.mulall(args.dims),
-        DTYPES_MAP[args.dtype],
-        args.threads
-    )
+    dtype = DTYPES_MAP[args.dtype]
+    flops = runtime.evaluate_flops(dtype)
+    assert flops != 0, f"unable to evaluate machine flops for type {dtype}"
+    flop = utils.mulall(args.dims)
+    time = flop / flops / args.threads
+    return time
 
 def search_some(tile_strategy, tile_generator, op_args, args):
     # Search depends on search strategy
@@ -541,11 +543,11 @@ def optimize(args):
     for backend in args.backends:
         OPERATORS[args.operator]["backends"][backend]["init"]()
     if args.test:
-        ptime = peak_time(args)
         all_results = []
         def output_one(results):
             all_results.append(results)
         evaluate_one(tile_strategy, args.test, op_args, args, callback=output_one)
+        ptime = peak_time(args)
         for results in all_results:
             in_x, error, time, backend = results
             if error == 0:
