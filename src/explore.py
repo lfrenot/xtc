@@ -88,7 +88,7 @@ def mlir_matmul_sched(i, j, k, ftype, args):
     )
     compiler = comp(
         mlir_module=sched,
-        mlir_install_dir=f"{HOME}/bin/llvm",
+        mlir_install_dir=args.mlir_prefix,
     )
     return compiler, sched, op_matmul, "mlir"
 
@@ -654,6 +654,7 @@ def main():
     parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
     parser.add_argument("--jobs", type=int, default=1, help="parallel compile jobs")
     parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
+    parser.add_argument("--mlir-prefix", type=str, help="MLIR install prefix, defaults to mlir package")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
     parser.add_argument("--quiet", action=argparse.BooleanOptionalAction, help="quiet optionnal output and progress bar")
     parser.add_argument("--dump", action=argparse.BooleanOptionalAction, help="dump IR while generating")
