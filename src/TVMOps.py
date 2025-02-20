@@ -97,25 +97,42 @@ class Operation():
         results = evaluator(*tvm_inputs, *tvm_outputs).results
         return results, 0, ""
 
-    def run_eval_dll(self, dll, sym, repeat=1, min_repeat_ms=0, number=1, validate=False, parameters=None):
+    def run_eval_dll(
+            self,
+            dll,
+            sym,
+            repeat=1,
+            min_repeat_ms=0,
+            number=1,
+            validate=False,
+            init_zero = False,
+            parameters=None,
+            reference=None,
+    ):
         dll = os.path.abspath(dll)
         with utils.LibLoader(dll) as lib:
             func = getattr(lib, "matmul")
             assert func is not None, f"Cannot find {sym} in lib {dll}"
             func.packed = True
-            inputs_spec = self.np_inputs_spec()
-            outputs_spec = self.np_outputs_spec()
             if parameters is None:
+                inputs_spec = self.np_inputs_spec()
+                outputs_spec = self.np_outputs_spec()
+                out_init = np.zeros if init_zero else np.empty
                 inputs = [utils.np_init(**spec) for spec in inputs_spec]
-                outputs = [np.empty(**spec) for spec in outputs_spec]
+                outputs = [out_init(**spec) for spec in outputs_spec]
                 parameters = (
                     [NDArray(inp) for inp in inputs],
                     [NDArray(out) for out in outputs],
                 )
             if validate:
                 ref_inputs = [inp.numpy() for inp in parameters[0]]
-                ref_outputs = [np.empty(**spec) for spec in outputs_spec]
-                self.reference_impl(*ref_inputs, *ref_outputs)
+                ref_outputs = [
+                    np.empty(shape=out.shape, dtype=out.dtype)
+                    for out in parameters[1]
+                ]
+                if reference is None:
+                    reference = self.reference_impl
+                reference(*ref_inputs, *ref_outputs)
                 exec_func = Executor(func)
                 exec_func(*parameters[0], *parameters[1])
                 for out_ref, out in zip(ref_outputs, [out.numpy() for out in parameters[1]]):

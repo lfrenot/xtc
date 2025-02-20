@@ -57,6 +57,9 @@ import runtime
 
 logger = logging.getLogger(__name__)
 
+def reference_matmul(a, b, c):
+    np.matmul(a, b, out=c)
+
 def mlir_init():
     from MlirNodeImplementer import MlirNodeImplementer as impl
 
@@ -368,9 +371,16 @@ def load_and_evaluate_one(ident, backend, impl, dump_file, in_x, args, callback=
     logger.debug("Evaluate: %s: %s...", ident, in_x)
     payload_lib = f"{dump_file}.so"
     payload_name = impl.payload_name
-    stdout = impl.load_and_evaluate(payload_lib, impl.payload_name,
-                                    repeat=args.repeat, number=args.number, min_repeat_ms=args.min_repeat_ms,
-                                    validate=args.validate, parameters=args.eval_parameters)
+    stdout = impl.load_and_evaluate(
+        payload_lib,
+        payload_name,
+        repeat=args.repeat,
+        number=args.number,
+        min_repeat_ms=args.min_repeat_ms,
+        validate=args.validate,
+        parameters=args.eval_parameters,
+        reference=reference_matmul,
+    )
     if not args.save_temps:
         Path(payload_lib).unlink()
     error = 0
