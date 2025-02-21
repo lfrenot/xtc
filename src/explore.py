@@ -48,6 +48,7 @@ import numpy as np
 from tqdm import tqdm
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
 import time
 from pathlib import Path
 
@@ -697,6 +698,8 @@ def launch_child(argv, args):
 
 
 def main():
+    default_jobs = max(1, multiprocessing.cpu_count()//2)
+    default_unroll = 512
     parser = argparse.ArgumentParser(
         description="Autotune Matmult",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -710,18 +713,18 @@ def main():
     parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
-    parser.add_argument("--max-unroll", type=int, default=1024, help="max unroll in tiling strategies")
+    parser.add_argument("--max-unroll", type=int, default=default_unroll, help="max unroll in tiling strategies")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--output", type=str, default="results.csv", help="output csv file for search")
     parser.add_argument("--eval", type=str, choices=["eval"], default="eval", help="evaluation method")
-    parser.add_argument("--repeat", type=int, default=5, help="evaluation repeat")
+    parser.add_argument("--repeat", type=int, default=1, help="evaluation repeat")
     parser.add_argument("--number", type=int, default=1, help="evaluation number")
     parser.add_argument("--min-repeat-ms", type=int, default=100, help="evaluation min repeat ms")
     parser.add_argument("--validate", action=argparse.BooleanOptionalAction, help="validate results")
     parser.add_argument("--save-temps", action=argparse.BooleanOptionalAction, help="save temps to save temps dir")
     parser.add_argument("--save-temps-dir", type=str, default="./save_temps_dir", help="save temps dir")
     parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
-    parser.add_argument("--jobs", type=int, default=1, help="parallel compile jobs")
+    parser.add_argument("--jobs", type=int, default=default_jobs, help="parallel compile jobs")
     parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
     parser.add_argument("--mlir-prefix", type=str, help="MLIR install prefix, defaults to mlir package")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
