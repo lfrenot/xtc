@@ -124,6 +124,9 @@ class Implementer:
         io = StringIO()
         self.dump_tvm_schedule(outf=io)
         schedule_str = io.getvalue()
+        if print_transformed_ir:
+            print(schedule_str)
+            sys.stdout.flush()
         self.op.schedule(schedule_str)
         if print_transformed_ir:
             print(self.op.lower())
@@ -231,10 +234,10 @@ class Implementer:
             for idx in range(1, len(tiles)):
                 print(f"{t_axes[idx]}, {t_axes[idx+1]} = {sch}[O].split({t_axes[idx]}, factor={t_sizes[idx]})", file=outf)
         print(f"{sch}[O].reorder({', '.join(self.permutation)})", file=outf)
-        for axis in self.vectorization:
-            print(f"{sch}[O].vectorize({axis})", file=outf)
         for axis, unroll in self.unrolling.items():
             print(f"{sch}[O].unroll({axis})", file=outf)
+        for axis in self.vectorization:
+            print(f"{sch}[O].vectorize({axis})", file=outf)
         if self.parallelization:
             if len(self.parallelization) > 1:
                 print(f"{self.parallelization[0]} = {sch}[O].fuse({', '.join(self.parallelization)})", file=outf)
