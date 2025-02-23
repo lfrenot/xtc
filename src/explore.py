@@ -151,9 +151,10 @@ def mlir_matmul_impl(i, j, k, ftype, graph, args):
         mlir_module=impl,
         to_disassemble=impl.payload_name,
     )
-    impl_node = mlir_nodes["matmul"]
-    source_op = impl_node.source_op
-    return compiler, impl, impl_node, source_op, "mlir"
+    node_scheduler = mlir_nodes["matmul"].get_scheduler()
+    scheduler = impl.get_scheduler()
+    source_op = mlir_nodes["matmul"].source_op
+    return compiler, scheduler, node_scheduler, source_op, "mlir"
 
 def tvm_matmul_graph(i, j, k, ftype):
     # Note that mlir, tvm import order causes issues

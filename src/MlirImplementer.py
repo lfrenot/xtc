@@ -93,3 +93,7 @@ class MlirImplementer(MlirModule, ABC):
     @abstractmethod
     def reference_impl(self, *operands):
         pass
+
+    def get_scheduler(self):
+        # TODO: for now Scheduler object is self
+        return self
