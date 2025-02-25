@@ -1059,7 +1059,7 @@ def main():
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
     parser.add_argument("--opt-level", type=int, default=4, help="opt level, 0-3 one-shot, 4 search")
     parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
-    parser.add_argument("--trials", type=int, default=10000, help="num trials")
+    parser.add_argument("--trials", type=int, default=100, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
     parser.add_argument("--max-unroll", type=int, default=default_unroll, help="max unroll in tiling strategies")
     parser.add_argument("--seed", type=int, default=0, help="seed")
