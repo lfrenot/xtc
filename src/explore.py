@@ -901,7 +901,10 @@ def optimize(args):
     op_args = (*dims, dtype)
     tile_strategy = STRATEGIES[args.strategy]["strategy"]
     impls = get_all_impls(op_args, args)
-    if args.test:
+    if args.test or args.opt_level in [0, 1, 2, 3]:
+        schedule = args.test
+        if not schedule:
+            schedule = STRATEGIES[args.strategy]["schedule"](args.opt_level, op_args)
         ncomp_per_job = len(args.backends)
         nexec_per_job = 1 if args.execute else 0
         search_callback = SearchProgressTQDM(
@@ -917,7 +920,7 @@ def optimize(args):
             "result": output_one,
             "search": search_callback,
         }
-        evaluate_one(tile_strategy, args.test, impls, op_args, args, callbacks=callbacks)
+        evaluate_one(tile_strategy, schedule, impls, op_args, args, callbacks=callbacks)
         ptime = peak_time(args)
         for results in all_results:
             in_x, error, time, backend = results
@@ -1054,6 +1057,7 @@ def main():
     parser.add_argument("--dims", nargs="+", type=int, default=OPERATORS["matmul"]["default_dims"], help="dimensions")
     parser.add_argument("--huge-pages", action=argparse.BooleanOptionalAction, default=True, help="alloc at huge page boundaries")
     parser.add_argument("--test", nargs="+", type=int, default=[], help="test this input only")
+    parser.add_argument("--opt-level", type=int, default=4, help="opt level, 0-3 one-shot, 4 search")
     parser.add_argument("--dtype", type=str, choices=list(DTYPES_MAP.keys()), default=OPERATORS["matmul"]["default_type"], help="data type")
     parser.add_argument("--trials", type=int, default=10000, help="num trials")
     parser.add_argument("--threads", type=int, default=1, help="number of threads")
