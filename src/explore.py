@@ -797,6 +797,8 @@ def evaluate_all_parallel(tile_strategy, all_in_x, impls, op_args, args, callbac
                         )
                         future.add_done_callback(future_callback)
                         futures.append(future)
+                if len(job_compiled) < len(job_in_x):
+                    raise RuntimeError("compilation error in some compile job")
             search_callback.compile_batch_end()
             if args.execute:
                 compiled_results =[x[1] for x in sorted(job_compiled, key=lambda x: x[0])]
