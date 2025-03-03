@@ -8,7 +8,7 @@ __all__ = [
 
 from runtime_types import DLDevice, DLDeviceTypeCode, DLDataType, DLDataTypeCode, DLTensor, CNDArray
 
-runtime = utils.LazyImport("runtime")
+import runtime
 
 class NDArray():
     np_dtype_map = {

@@ -7,6 +7,7 @@ import numpy as np
 
 from xdsl.dialects import func as xdslfunc
 
+from mlir.dialects import arith, transform
 from mlir.dialects.transform import NamedSequenceOp
 from mlir.passmanager import PassManager
 
@@ -35,11 +36,11 @@ class MlirCompiler:
     def __init__(
             self,
             mlir_module: RawMlirModule,
-            mlir_install_dir: str,
+            mlir_install_dir: str | None = None,
             to_disassemble: str | None = None,
     ):
         self.mlir_module = mlir_module
-        self.mlir_install_dir = mlir_install_dir
+        self.mlir_install_dir = utils.get_mlir_prefix(mlir_install_dir)
         self.to_disassemble = to_disassemble
         
     @property
@@ -342,6 +343,7 @@ class MlirCompiler:
         number=1,
         validate=False,
         parameters=None,
+        reference=None,
     ):
         results, code, error = self.load_and_eval(
             dll,
@@ -351,6 +353,7 @@ class MlirCompiler:
             number=number,
             validate=validate,
             parameters=parameters,
+            reference=reference,
         )
         if code == 0:
             return min(results)
@@ -366,14 +369,15 @@ class MlirCompiler:
         number=1,
         validate=False,
         parameters=None,
+        reference=None,
     ):
         libpath = os.path.abspath(dll)
         with utils.LibLoader(libpath) as lib:
             func = getattr(lib, sym)
             assert func is not None, f"Cannot find {sym} in lib {dll}"
-            inputs_spec = self.mlir_module.np_inputs_spec()
-            outputs_spec = self.mlir_module.np_outputs_spec()
             if parameters is None:
+                inputs_spec = self.mlir_module.np_inputs_spec()
+                outputs_spec = self.mlir_module.np_outputs_spec()
                 inputs = [utils.np_init(**spec) for spec in inputs_spec]
                 outputs = [np.empty(**spec) for spec in outputs_spec]
                 parameters = (
@@ -382,8 +386,13 @@ class MlirCompiler:
                 )
             if validate:
                 ref_inputs = [inp.numpy() for inp in parameters[0]]
-                ref_outputs = [np.empty(**spec) for spec in outputs_spec]
-                self.mlir_module.reference_impl(*ref_inputs, *ref_outputs)
+                ref_outputs = [
+                    np.empty(shape=out.shape, dtype=out.dtype)
+                    for out in parameters[1]
+                ]
+                if reference is None:
+                    reference = self.mlir_module.reference_impl
+                reference(*ref_inputs, *ref_outputs)
                 exec_func = Executor(func)
                 exec_func(*parameters[0], *parameters[1])
                 for out_ref, out in zip(

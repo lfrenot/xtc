@@ -9,8 +9,6 @@ from MlirNodeImplementer import MlirNodeImplementer
 from MlirGraphImplementer import MlirGraphImplementer
 from MlirCompiler import MlirCompiler
 
-DEFAULT_LLVM_DIR = "/home/hpompougnac/bin/llvm"
-
 def main():
     parser = argparse.ArgumentParser(description='Blabla.')
     parser.add_argument(
@@ -22,8 +20,7 @@ def main():
     parser.add_argument(
         "--llvm-dir",
         type=str,
-        default=f"{DEFAULT_LLVM_DIR}",
-        help="The directory where LLVM binaries are installed.",
+        help="The prefix for LLVM/MLIR tools, or autodetected.",
     )
     parser.add_argument(
         "--print-source-ir",

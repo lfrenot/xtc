@@ -51,7 +51,7 @@ class Implementer:
     
     def _update_loops(self):
         loops = dict()
-        parallels = []attribute unroll loop mlir
+        parallels = []
         for tile_level in range(len(max(self.tiles.values(),key=len))):
             for (k,v) in self.tiles.items():
                 if tile_level >= len(v):
@@ -124,6 +124,9 @@ class Implementer:
         io = StringIO()
         self.dump_tvm_schedule(outf=io)
         schedule_str = io.getvalue()
+        if print_transformed_ir:
+            print(schedule_str)
+            sys.stdout.flush()
         self.op.schedule(schedule_str)
         if print_transformed_ir:
             print(self.op.lower())
@@ -160,7 +163,9 @@ class Implementer:
             min_repeat_ms = 0,
             number = 1,
             validate = False,
+            init_zero = False,
             parameters = None,
+            reference = None,
     ):
         results, code, error = self.load_and_eval(
             dll,
@@ -169,22 +174,38 @@ class Implementer:
             min_repeat_ms=min_repeat_ms,
             number=number,
             validate=validate,
+            init_zero=init_zero,
             parameters=parameters,
+            reference=reference,
         )
         if code == 0:
             return min(results)
         else:
             return error
 
-    def load_and_eval(self,
-                          dll,
-                          sym,
-                          repeat=1,
-                          min_repeat_ms=0,
-                          number=1,
-                          validate=False,
-                          parameters=None):
-        results, code, error = self.op.run_eval_dll(dll, sym, repeat=repeat, number=number, min_repeat_ms=min_repeat_ms, validate=validate, parameters=parameters)
+    def load_and_eval(
+            self,
+            dll,
+            sym,
+            repeat=1,
+            min_repeat_ms=0,
+            number=1,
+            validate=False,
+            init_zero = False,
+            parameters=None,
+            reference=None,
+    ):
+        results, code, error = self.op.run_eval_dll(
+            dll,
+            sym,
+            repeat=repeat,
+            number=number,
+            min_repeat_ms=min_repeat_ms,
+            validate=validate,
+            init_zero=init_zero,
+            parameters=parameters,
+            reference=reference,
+        )
         return results, code, error
 
     def dump_schedule(self, obj=None, outf=sys.stdout):
@@ -213,10 +234,10 @@ class Implementer:
             for idx in range(1, len(tiles)):
                 print(f"{t_axes[idx]}, {t_axes[idx+1]} = {sch}[O].split({t_axes[idx]}, factor={t_sizes[idx]})", file=outf)
         print(f"{sch}[O].reorder({', '.join(self.permutation)})", file=outf)
-        for axis in self.vectorization:
-            print(f"{sch}[O].vectorize({axis})", file=outf)
         for axis, unroll in self.unrolling.items():
             print(f"{sch}[O].unroll({axis})", file=outf)
+        for axis in self.vectorization:
+            print(f"{sch}[O].vectorize({axis})", file=outf)
         if self.parallelization:
             if len(self.parallelization) > 1:
                 print(f"{self.parallelization[0]} = {sch}[O].fuse({', '.join(self.parallelization)})", file=outf)
