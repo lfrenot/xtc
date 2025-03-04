@@ -1132,6 +1132,9 @@ def setup_args(args):
     MAX_UNROLL = args.max_unroll
     VEC_SIZE = 16
 
+    if "tvm" in args.backends:
+        os.environ["TVM_NUM_THREADS"] = str(args.threads)
+
     if args.eval == "eval" and args.execute:
         args.eval_parameters = get_eval_parameters(args)
 
@@ -1184,7 +1187,7 @@ def main():
     parser.add_argument("--save-temps", action=argparse.BooleanOptionalAction, help="save temps to save temps dir")
     parser.add_argument("--save-temps-dir", type=str, default="./save_temps_dir", help="save temps dir")
     parser.add_argument("--explore-dir", type=str, default=".", help="exploration results .so dir")
-    parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=False, help="internal flag for marking child execution")
+    parser.add_argument("--child", action=argparse.BooleanOptionalAction, default=True, help="internal flag for marking child execution (obsolete)")
     parser.add_argument("--bare-ptr", action=argparse.BooleanOptionalAction, default=False, help="use bare pointer interface (for TVM backend)")
     parser.add_argument("--jobs", type=int, default=default_jobs, help="parallel compile jobs")
     parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
