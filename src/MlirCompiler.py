@@ -244,6 +244,7 @@ class MlirCompiler:
         save_temps_dir = kwargs.get("save_temps_dir", "./save_temps_dir")
         save_temp = partial(self._save_temp, save_temps, save_temps_dir)
 
+        os.makedirs(save_temps_dir, exist_ok=True)
         dump_base = os.path.basename(dump_file)
         dump_tmp_base = f"{save_temps_dir}/{dump_base}"
         ir_dump_file = f"{dump_tmp_base}.ir"
