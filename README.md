@@ -60,9 +60,9 @@ and install base requirements, for instance:
     python3 -m venv .venv
     source .venv/bin/activate
 
-Install the package, for instance in editable mode:
+Install the package for development/testing with:
 
-    pip install -e .
+    pip install -e .[dev]
 
 
 Then install the MLIR requirements and optionally TVM and JIT backend requirements
@@ -142,9 +142,10 @@ https://gitlab.inria.fr/CORSE/jir for building JIR and dependent tools from sour
 
 ## Test Installation
 
-Validate installation by launching tests:
+Validate installation by launching lit tests and pytest tests:
 
     lit tests/filecheck
+    pytest tests
 
 
 ## Exploration
