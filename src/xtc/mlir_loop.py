@@ -9,11 +9,11 @@ from xdsl.dialects import (
 from xdsl.ir import (
     Operation,
 )
-from xdsl_aux import parse_xdsl_module
-from MlirModule import MlirModule
-from MlirNodeImplementer import MlirNodeImplementer
-from MlirGraphImplementer import MlirGraphImplementer
-from MlirCompiler import MlirCompiler
+from xtc.xdsl_aux import parse_xdsl_module
+from xtc.MlirModule import MlirModule
+from xtc.MlirNodeImplementer import MlirNodeImplementer
+from xtc.MlirGraphImplementer import MlirGraphImplementer
+from xtc.MlirCompiler import MlirCompiler
 
 
 def remove_attr(o: Operation, attr_name: str):

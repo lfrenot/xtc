@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Can be set to True for RUNTIME_DEBUG
 RUNTIME_DEBUG = False
 
-from runtime_types import DLDevice, DLDataType
+from xtc.runtime_types import DLDevice, DLDataType
 
 class _c_ascii_str():
     @staticmethod

@@ -3,11 +3,11 @@
 import argparse
 import os
 from xdsl.dialects import func, linalg
-from xdsl_aux import parse_xdsl_module
-from MlirModule import RawMlirModule
-from MlirNodeImplementer import MlirNodeImplementer
-from MlirGraphImplementer import MlirGraphImplementer
-from MlirCompiler import MlirCompiler
+from xtc.xdsl_aux import parse_xdsl_module
+from xtc.MlirModule import RawMlirModule
+from xtc.MlirNodeImplementer import MlirNodeImplementer
+from xtc.MlirGraphImplementer import MlirGraphImplementer
+from xtc.MlirCompiler import MlirCompiler
 
 def main():
     parser = argparse.ArgumentParser(description='Blabla.')

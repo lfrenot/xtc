@@ -1,5 +1,5 @@
 [project]
-name = "mlir_loop"
+name = "xtc"
 version = "0.1"
 dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0']
 requires-python = ">=3.10"
@@ -16,16 +16,16 @@ platforms = ["Linux"]
 zip-safe = false
 
 [tool.setuptools.package-data]
-mlir_loop = ["py.typed"]
+xtc = ["py.typed", "ctools/**", "templates/**"]
 
 [project.scripts]
-mlir-loop = "mlir_loop:main"
-backend = "backend:main"
-loop-display = "display_results:main"
-loop-explore = "explore:main"
+mlir-loop = "xtc.mlir_loop:main"
+backend = "xtc.backend:main"
+loop-display = "xtc.display_results:main"
+loop-explore = "xtc.explore:main"
 
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pyright]

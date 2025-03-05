@@ -1,5 +1,5 @@
 import numpy as np
-import utils
+import xtc.utils as utils
 
 class Operation():
 

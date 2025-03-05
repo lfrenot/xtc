@@ -11,8 +11,8 @@ def requires_tvm(*arg):
 
 
 def matmul_impl(i, j, k, dtype, name):
-    from TVMImplementer import Implementer
-    from TVMOps import Operators, Operation
+    from xtc.TVMImplementer import Implementer
+    from xtc.TVMOps import Operators, Operation
     op = Operation(Operators.matmul, (i, j, k, dtype), name=name)
     impl = Implementer(
         source_op = op,

@@ -8,8 +8,8 @@ from mlir.dialects.transform.structured import (
 from mlir.dialects import transform
 from mlir.ir import UnitAttr,OpResult
 
-from MlirNodeImplementer import MlirNodeImplementer
-from MlirImplementer import MlirImplementer
+from xtc.MlirNodeImplementer import MlirNodeImplementer
+from xtc.MlirImplementer import MlirImplementer
 
 
 class MlirGraphImplementer(MlirImplementer):

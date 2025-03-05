@@ -14,8 +14,8 @@ from mlir.dialects.transform import (
 )
 from mlir.dialects.transform.loop import loop_unroll
 from mlir.ir import UnitAttr, OpResult
-from xdsl_aux import xdsl_operator_to_function
-from MlirImplementer import MlirImplementer
+from xtc.xdsl_aux import xdsl_operator_to_function
+from xtc.MlirImplementer import MlirImplementer
 
 ty_tiles = dict[str, int]
 
@@ -151,7 +151,7 @@ class MlirNodeImplementer(MlirImplementer):
     @override
     def needs_vectorization(self) -> bool:
         return len(self.vectorization) > 0
-        
+
     def generate_node_tiling(self, handle: OpResult):
         # Produce the sequence of commands needed for the tiling
         tiling_arrays: dict[str, list[int]] = {}
@@ -238,7 +238,7 @@ class MlirNodeImplementer(MlirImplementer):
     def check_consistency(self):
         # TODO: create asserts on input parameters
         pass
-    
+
     @classmethod
     def _np_types_spec(
         cls, types: list[xdslAnyMemRefType]

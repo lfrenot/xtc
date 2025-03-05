@@ -13,7 +13,7 @@ from mlir.dialects.transform import (
     get_parent_op,
 )
 
-from MlirModule import MlirModule
+from xtc.MlirModule import MlirModule
 
 
 class MlirImplementer(MlirModule, ABC):

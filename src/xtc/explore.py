@@ -69,9 +69,9 @@ import multiprocessing
 import time
 from pathlib import Path
 
-import utils
-from ndarray import NDArray
-import runtime
+import xtc.utils as utils
+from xtc.ndarray import NDArray
+import xtc.runtime as runtime
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +142,9 @@ def mlir_matmul_impl(i, j, k, ftype, graph):
     from xdsl.ir import Block, Region
     from xdsl.dialects.builtin import FunctionType, MemRefType, f32, f64
     from xdsl.dialects import func
-    from MlirGraphImplementer import MlirGraphImplementer
-    from MlirCompiler import MlirCompiler
-    from MlirNodeImplementer import MlirNodeImplementer
+    from xtc.MlirGraphImplementer import MlirGraphImplementer
+    from xtc.MlirCompiler import MlirCompiler
+    from xtc.MlirNodeImplementer import MlirNodeImplementer
 
     mlir_nodes = {
         ident: MlirNodeImplementer(
@@ -175,7 +175,7 @@ def mlir_matmul_impl(i, j, k, ftype, graph):
 def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     # Note that mlir, tvm import order causes issues
     import tvm, tvm.te
-    import TVMImplementer
+    import xtc.TVMImplementer as TVMImplementer
     matmul = TVMImplementer.Operation(
         TVMImplementer.Operators.matmul,
         (i, j, k, DTYPES_MAP[ftype]),
@@ -193,7 +193,7 @@ def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     }
 
 def tvm_matmul_impl(i, j, k, ftype, graph):
-    import TVMImplementer
+    import xtc.TVMImplementer as TVMImplementer
     node = graph["nodes"]["matmul"]
     impl = TVMImplementer.Implementer(
         source_op=node["op"],
@@ -205,7 +205,7 @@ def tvm_matmul_impl(i, j, k, ftype, graph):
     return compiler, node_scheduler, node_scheduler, node["op"], "tvm"
 
 def jir_matmul_graph(i, j, k, ftype, name="matmul"):
-    import JIRImplementer
+    import xtc.JIRImplementer as JIRImplementer
     matmul = JIRImplementer.Operation(
         JIRImplementer.Operators.matmul,
         (i, j, k, DTYPES_MAP[ftype]),
@@ -223,7 +223,7 @@ def jir_matmul_graph(i, j, k, ftype, name="matmul"):
     }
 
 def jir_matmul_impl(i, j, k, ftype, graph):
-    import JIRImplementer
+    import xtc.JIRImplementer as JIRImplementer
     node = graph["nodes"]["matmul"]
     impl = JIRImplementer.Implementer(
         source_op=node["op"],
@@ -234,7 +234,7 @@ def jir_matmul_impl(i, j, k, ftype, graph):
     return compiler, node_scheduler, node_scheduler, node["op"], "jir"
 
 def tvm_relu_graph(i, ftype, threshold=0, name=None):
-    import TVMImplementer
+    import xtc.TVMImplementer as TVMImplementer
     relu = TVMImplementer.Operation(
         TVMImplementer.Operators.relu,
         (i, DTYPES_MAP[ftype]),
@@ -251,7 +251,7 @@ def tvm_relu_graph(i, ftype, threshold=0, name=None):
     }
 
 def tvm_relu_impl(i, ftype, graph):
-    import TVMImplementer
+    import xtc.TVMImplementer as TVMImplementer
     node = graph["nodes"]["relu"]
     impl = TVMImplementer.Implementer(
         source_op=node["op"],

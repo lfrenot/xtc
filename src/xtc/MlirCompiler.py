@@ -9,9 +9,9 @@ import numpy as np
 from mlir.dialects.transform import NamedSequenceOp
 from mlir.passmanager import PassManager
 
-import utils
-from evaluator import Evaluator, Executor
-from ext_tools import (
+import xtc.utils as utils
+from xtc.evaluator import Evaluator, Executor
+from xtc.ext_tools import (
     transform_opts,
     lowering_opts,
     mlirtranslate_opts,
@@ -30,7 +30,7 @@ from ext_tools import (
     objdump_color_opts,
 )
 
-from MlirModule import RawMlirModule
+from xtc.MlirModule import RawMlirModule
 
 class MlirCompiler:
     def __init__(

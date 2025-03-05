@@ -1,4 +1,4 @@
-from JIROps import Operation
+from xtc.JIROps import Operation
 
 __all__ = [
     "JIRSchedulerAdaptor",

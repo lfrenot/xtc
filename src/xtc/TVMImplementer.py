@@ -10,10 +10,10 @@ import numpy as np
 from functools import partial
 import shlex
 
-import utils
-from ndarray import NDArray
-from TVMOps import Operation, Operators
-from evaluator import Evaluator, Executor
+import xtc.utils as utils
+from xtc.ndarray import NDArray
+from xtc.TVMOps import Operation, Operators
+from xtc.evaluator import Evaluator, Executor
 
 __all__ = [
     "Implementer",

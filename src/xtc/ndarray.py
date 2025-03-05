@@ -1,14 +1,13 @@
 import ctypes
 import numpy as np
-import utils
 
 __all__ = [
     "NDArray",
 ]
 
-from runtime_types import DLDevice, DLDeviceTypeCode, DLDataType, DLDataTypeCode, DLTensor, CNDArray
+from xtc.runtime_types import DLDevice, DLDeviceTypeCode, DLDataType, DLDataTypeCode, DLTensor, CNDArray
 
-import runtime
+import xtc.runtime as runtime
 
 class NDArray():
     np_dtype_map = {
