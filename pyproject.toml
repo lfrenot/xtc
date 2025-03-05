@@ -1,6 +1,6 @@
 [project]
 name = "xtc"
-version = "0.1"
+version = "0.1.dev1"
 dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0']
 requires-python = ">=3.10"
 
@@ -8,7 +8,12 @@ requires-python = ">=3.10"
 dev = [
     "filecheck",
     "lit",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings-python",
+    "mypy",
     "pytest",
+    "pyright",
 ]
 
 [tool.setuptools]
@@ -29,14 +34,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pyright]
-include = [
-        "src/MlirModule.py",
-        "src/MlirImplementer.py",
-        "src/MlirGraphImplementer.py",
-        "src/MlirNodeImplementer.py",
-]
+pythonVersion = "3.10"
+include = ["src/xtc/itf"]
 reportMissingParameterType = "error"
-reportMissingTypeArgument = "error"
 reportImplicitOverride = "error"
 reportUninitializedInstanceVariable = "error"
 reportPossiblyUnboundVariable = "error"
@@ -45,4 +45,11 @@ reportIncompatibleMethodOverride = "error"
 reportArgumentType = "error"
 reportReturnType = "error"
 reportAbstractUsage = "error"
-reportUnusedImport = "error"
+# Those are too strict
+#reportMissingTypeArgument = "error"
+#reportUnusedImport = "error"
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["xtc.itf"]
+ignore_missing_imports = true
