@@ -125,7 +125,7 @@ def cpu_info() -> Dict[str,Any]:
     """
     Returm cpu info dict with fields:
     - ipc: max number of vec ops per cycle
-    - vsize: dict of max elements per type ("float32", "float64, ...)
+    - vsize: dict of max elements per type ("float32", "float64", ...)
     - freq: frequency as cycles/sec
     - arch: arch ("x86_64", "aarch64", ...)
     """
@@ -139,7 +139,7 @@ def cpu_info() -> Dict[str,Any]:
         },
         "avx2": {
             "vsize": {
-                "float32": 6,
+                "float32": 8,
                 "float64": 4,
             }
         },
