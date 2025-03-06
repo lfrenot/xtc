@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from functools import reduce
 from typing import Dict, List, Union, Tuple, Any
-
+import re
 
 _divisors_list_memo: Dict[int, List[int]] = {}
 
@@ -243,6 +243,7 @@ class LibLoader():
         """ Context manager unloads the library """
         self.close()
 
+
 def get_mlir_prefix(prefix: Path|str|None = None):
     """
     Tentatively return the mlir compiler prefix where
@@ -276,3 +277,50 @@ def get_mlir_prefix(prefix: Path|str|None = None):
     if not mlir_opt.exists():
         raise RuntimeError(f"could not find mlir-opt at: {mlir_opt}")
     return prefix
+
+
+def get_geist_prefix(prefix: Path|str|None = None):
+    """
+    Tentatively return the mlir polygeist prefix where
+    {prefix}/bin/cgeist can be found.
+    Raise on error.
+    Defined in order as:
+    - passed prefix if not None
+    - env var XTC_GEIST_PREFIX
+    - polygeist python package prefix if installed
+    - cgeist binary prefix in PATH
+    """
+    if prefix is None:
+        prefix_var = os.environ.get("XTC_GEIST_PREFIX")
+        if prefix_var:
+            prefix = Path(prefix_var)
+        else:
+            try:
+                import polygeist
+                prefix = Path(polygeist.__path__[0])
+            except:
+                cgeist_exe = shutil.which("cgeist")
+                if cgeist_exe:
+                    prefix = Path(cgeist_exe).parents[1]
+    else:
+        prefix = Path(prefix)
+    if prefix is None:
+        raise RuntimeError("could not find Polygeist installation")
+    if not prefix.exists():
+        raise RuntimeError(f"could not find Polygeist prefix at: {prefix}")
+    cgeist = prefix / "bin" / "cgeist"
+    if not cgeist.exists():
+        raise RuntimeError(f"could not find cgeist at: {cgeist}")
+    return prefix
+
+
+class Replace():
+    """
+    Replace a serie of {{key}} value in a text.
+    """
+    def __init__(self, keys):
+        self.pattern = re.compile("|".join([re.escape("{{"+k+"}}") for k in keys]))
+
+    def replace(self, text, **replaces):
+        rep = dict((re.escape("{{"+k+"}}"), v) for k, v in replaces.items())
+        return self.pattern.sub(lambda m: rep[re.escape(m.group(0))], text)

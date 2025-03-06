@@ -1,7 +1,7 @@
 from JIROps import Operation
 
 __all__ = [
-    "JIRSchedulerAdaaptor",
+    "JIRSchedulerAdaptor",
 ]
 
 class JIRSchedulerAdaptor():
@@ -101,12 +101,13 @@ class JIRSchedulerAdaptor():
 
     def _generate_unroll_cmds(self) -> list[str]:
         dims = self._get_tiles_dims()
+        # We skip unroll if the loop is already fully vectorized
         cmds = [
             f"update_props target={self.axes_map[axis]} "
             f"unroll={size}"
             for axis, size
             in self.unrolled.items()
-            if dims[axis] != 1
+            if dims[axis] != 1 and axis not in self.vectorized
         ]
         return cmds
 
