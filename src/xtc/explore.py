@@ -58,7 +58,7 @@ import os
 import argparse
 import logging
 import itertools
-import functools
+from functools import partial
 import csv
 import random
 import numpy as np
@@ -170,14 +170,14 @@ def mlir_matmul_impl(i, j, k, ftype, graph):
     node_scheduler = mlir_nodes["matmul"].get_scheduler()
     scheduler = impl.get_scheduler()
     source_op = mlir_nodes["matmul"].source_op
-    return compiler, scheduler, node_scheduler, source_op, "mlir"
+    return impl, compiler, scheduler, node_scheduler, source_op, "mlir"
 
 def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     # Note that mlir, tvm import order causes issues
     import tvm, tvm.te
-    import xtc.TVMImplementer as TVMImplementer
-    matmul = TVMImplementer.Operation(
-        TVMImplementer.Operators.matmul,
+    from xtc.backends.tvm.TVMOps import TVMOperation, TVMOperators
+    matmul = TVMOperation(
+        TVMOperators.matmul,
         (i, j, k, DTYPES_MAP[ftype]),
         name=name,
     )
@@ -193,16 +193,14 @@ def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     }
 
 def tvm_matmul_impl(i, j, k, ftype, graph):
-    import xtc.TVMImplementer as TVMImplementer
+    from xtc.backends.tvm import TVMImplementer
     node = graph["nodes"]["matmul"]
-    impl = TVMImplementer.Implementer(
+    impl = TVMImplementer(
         source_op=node["op"],
         dims=node["dims"],
         parallel_dims=node["parallel_dims"],
     )
-    compiler = impl
-    node_scheduler = impl.get_scheduler()
-    return compiler, node_scheduler, node_scheduler, node["op"], "tvm"
+    return impl, None, None, None, node["op"], "tvm"
 
 def jir_matmul_graph(i, j, k, ftype, name="matmul"):
     import xtc.JIRImplementer as JIRImplementer
@@ -231,7 +229,7 @@ def jir_matmul_impl(i, j, k, ftype, graph):
     )
     compiler = impl
     node_scheduler = impl.get_scheduler()
-    return compiler, node_scheduler, node_scheduler, node["op"], "jir"
+    return impl, compiler, node_scheduler, node_scheduler, node["op"], "jir"
 
 def tvm_relu_graph(i, ftype, threshold=0, name=None):
     import xtc.TVMImplementer as TVMImplementer
@@ -258,9 +256,7 @@ def tvm_relu_impl(i, ftype, graph):
         dims=node["dims"],
         parallel_dims=node["parallel_dims"],
     )
-    compiler = impl
-    node_scheduler = impl.get_scheduler()
-    return compiler, node_scheduler, node_scheduler, node["op"], "tvm"
+    return impl, None, None, None, node["op"], "tvm"
 
 def tile_strategy_1d(impl, op_args, in_x):
     i, dtype = op_args
@@ -676,17 +672,20 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
     assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
     implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
-    compiler, scheduler, node_scheduler, source_op, backend_name = implementer(
+    impl, compiler, scheduler, node_scheduler, source_op, backend_name = implementer(
         *op_args,
         operation
     )
     assert backend_name == backend
+    if scheduler is None:
+        scheduler = impl.get_scheduler()
+    if node_scheduler is None:
+        node_scheduler = scheduler
     tile_strategy(node_scheduler, op_args, in_x)
     schedule = scheduler.implement()
     if dump_file is None:
         dump_file = f"{args.explore_dir}/payload_{ident}"
     compile_args = dict(
-        schedule=schedule,
         shared_lib=True,
         dump_file=dump_file,
         no_entry=True,
@@ -707,42 +706,54 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
             save_temps_dir=f"{args.save_temps_dir}/{ident}",
         ))
     assert args.eval == "eval"
-    compiler.compile(**compile_args)
+    if compiler is None:
+        compiler = impl.get_compiler(**compile_args)
+        module = compiler.compile(schedule=schedule)
+    else:
+        compiler.compile(schedule=schedule, **compile_args)
+        module = None
     logger.debug("  Compile done: %s: %s.", ident, in_x)
-    return (ident, backend, compiler, dump_file, in_x)
+    # For now we pass (module, impl) as not all implementation
+    # provide module
+    return (ident, backend, (module, compiler), dump_file, in_x)
 
-def load_and_evaluate_one(ident, backend, compiler, dump_file, in_x, args, callbacks=None):
+def load_and_evaluate_one(ident, backend, module_compiler, dump_file, in_x, args, callbacks=None):
     logger.debug("Evaluate: %s: %s...", ident, in_x)
-    payload_lib = f"{dump_file}.so"
-    payload_name = compiler.payload_name
+    module, compiler = module_compiler
     reference_impl = OPERATORS[args.operator]["reference_impl"]
-    stdout = compiler.load_and_evaluate(
-        payload_lib,
-        payload_name,
+    evaluator_args = dict(
         repeat=args.repeat,
         number=args.number,
         min_repeat_ms=args.min_repeat_ms,
         validate=args.validate,
         parameters=args.eval_parameters,
         reference=reference_impl,
-        bare_ptr=args.bare_ptr,
     )
-    if not args.save_temps:
-        Path(payload_lib).unlink()
-    error = 0
-    try:
-        # TODO: for now we detect errors when trying to parse the result
-        time = float(stdout)
-    except ValueError:
-        time = 0
-        error = 1
-
-    if error == 0:
+    if module is not None:
+        payload_lib = module.file_name
+        evaluator = module.get_evaluator(**evaluator_args)
+        evaluate = evaluator.evaluate
+    else:
+        payload_lib = f"{dump_file}.so"
+        payload_name = compiler.payload_name
+        evaluate = partial(
+            compiler.load_and_eval,
+            payload_lib,
+            payload_name,
+            **evaluator_args
+        )
+    results, code, error_msg = evaluate()
+    if code == 0:
+        time = min(results)
         logger.debug("  Evaluated: %s: %s: time: %.2f msecs", ident, in_x, time*1000)
     else:
-        logger.error("Error evaluating: %s: %s", ident, in_x)
+        time = 0
+        logger.error("Error evaluating: %s: %s: %d: %s", ident, in_x, code, error_msg)
 
-    result = (in_x, error, time, backend)
+    if not args.save_temps:
+        Path(payload_lib).unlink()
+
+    result = (in_x, code, time, backend)
     if callbacks and "result" in callbacks:
         callbacks["result"](result)
     return result

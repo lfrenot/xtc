@@ -1,17 +1,16 @@
+from abc import ABC, abstractmethod
+from typing_extensions import override
 import numpy as np
-from typing import Any
+from typing import Any, Type
 
 __all__ = [
-    "Operation",
-    "Operators",
-    "Operator",
-    "OperatorMatmul",
-    "OperatorRelu",
+    "TVMOperation",
+    "TVMOperator",
+    "TVMOperators",
 ]
 
 import tvm
 import tvm.te as te
-import tvm.relay as relay
 
 def get_tvm_native_target_options() -> str:
     """
@@ -42,7 +41,7 @@ def get_tvm_native_target_options() -> str:
         target_options.append(f"-mattrs={attrs}")
     return " ".join(target_options)
 
-def tvm_build_crt(sch, operation, target, name=None):
+def tvm_build_crt(sch: Any, operation: Any, target: str, name: str|None = None) -> Any:
     # We use system-lib with crt runtime such that DSO loading works
     # The generated .so can then be used:
     # - for static compilation as soon as the tvm runtime is provided
@@ -68,8 +67,15 @@ def tvm_build_crt(sch, operation, target, name=None):
         **runtime_kwargs
     )
 
-class Operation():
-    def __init__(self, operator, args, attrs={}, name=None, target=None):
+class TVMOperation():
+    def __init__(
+            self,
+            operator: Type["TVMOperator"],
+            args: tuple[Any,...],
+            attrs: dict[str, Any] = {},
+            name: str|None = None,
+            target: str|None = None
+    ) -> None:
         self.operator = operator(args, attrs, name=name)
         self.args = args
         self.attrs = attrs
@@ -83,10 +89,10 @@ class Operation():
         self.dev = tvm.device(self.tgt.kind.name, 0)
         self.name = self.operator.name if name is None else name
 
-    def generate(self) -> tuple:
+    def generate(self) -> Any:
         return self.operator.generate_op()
 
-    def schedule(self, operation: tuple, schedule: str = "") -> Any:
+    def schedule(self, operation: Any, schedule: str = "") -> Any:
         sch = te.create_schedule(operation[-1].op)
         if schedule:
             exec(schedule,
@@ -94,7 +100,7 @@ class Operation():
                  {})
         return sch
 
-    def build(self, operation: tuple, sch: Any, func_name: str|None = None) -> Any:
+    def build(self, operation: Any, sch: Any, func_name: str|None = None) -> Any:
         if func_name is None:
             func_name = self.name
         return tvm_build_crt(
@@ -104,10 +110,10 @@ class Operation():
             target=self.tgt,
         )
 
-    def lower(self, operation: tuple, sch: Any) -> str:
+    def lower(self, operation: Any, sch: Any) -> str:
         return tvm.lower(sch, operation, simple_mode=True)
 
-    def np_inputs_spec(self):
+    def np_inputs_spec(self) -> list[dict[str, Any]]:
         inputs_spec = [
             {
                 "shape": shape,
@@ -118,7 +124,7 @@ class Operation():
         ]
         return inputs_spec
 
-    def np_outputs_spec(self):
+    def np_outputs_spec(self) -> list[dict[str, Any]]:
         outputs_spec = [
             {
                 "shape": shape,
@@ -129,23 +135,40 @@ class Operation():
         ]
         return outputs_spec
 
-    def reference_impl(self, *args):
+    def reference_impl(self, *args: Any) -> None:
         self.operator.reference_impl(*args)
 
 
-class Operator():
+class TVMOperator(ABC):
     DEFAULT_NAME = "undef"
-    def __init__(self, args, attrs, name=None):
-        self.args = tuple(args)
+    def __init__(self, args: tuple[Any,...], attrs: dict[str, Any], name: str|None = None) -> None:
+        self.args = args
         self.attrs = {**attrs}
         self.name = name if name is not None else self.DEFAULT_NAME
+
+    @abstractmethod
     def generate_op(self):
-        raise Exception("unimplemneted")
+        ...
+    @abstractmethod
+    def inputs_dims(self) -> tuple[tuple[int,...],...]:
+        ...
+    @abstractmethod
+    def inputs_types(self) -> tuple[str,...]:
+        ...
+    @abstractmethod
+    def outputs_dims(self) -> tuple[tuple[int,...],...]:
+        ...
+    @abstractmethod
+    def outputs_types(self) -> tuple[str,...]:
+        ...
+    @abstractmethod
+    def reference_impl(self, *args: Any) -> None:
+        ...
 
-
-class OperatorMatmul(Operator):
+class TVMOperatorMatmul(TVMOperator):
     DEFAULT_NAME = "matmul"
-    def generate_op(self):
+    @override
+    def generate_op(self) -> Any:
         i, j, k, dtype = self.args
         A = te.placeholder((i, k), name="A")
         B = te.placeholder((k, j), name="B")
@@ -158,37 +181,43 @@ class OperatorMatmul(Operator):
         )
         return A, B, O
 
-    def inputs_dims(self):
+    @override
+    def inputs_dims(self) -> tuple[tuple[int,...],...]:
         i, j, k, dtype = self.args
         return (i, k), (k, j)
 
-    def inputs_types(self):
+    @override
+    def inputs_types(self) -> tuple[str,...]:
         i, j, k, dtype = self.args
         return dtype, dtype
 
-    def outputs_dims(self):
+    @override
+    def outputs_dims(self) -> tuple[tuple[int,...],...]:
         i, j, k, dtype = self.args
         return (i, j),
 
-    def outputs_types(self):
+    @override
+    def outputs_types(self) -> tuple[str,...]:
         i, j, k, dtype = self.args
         return dtype,
 
-    def reference_impl(self, *args):
+    @override
+    def reference_impl(self, *args: Any) -> None:
         np.matmul(args[0], args[1], out=args[2])
 
 
-class OperatorRelu(Operator):
+class TVMOperatorRelu(TVMOperator):
     DEFAULT_NAME = "relu"
     DEFAULT_THRESHOLD = 0
-    def __init__(self, args, attrs, name=None):
+    def __init__(self, args: tuple[Any,...], attrs: dict[str, Any], name: str|None = None) -> None:
         attrs = {
             "threshold": self.DEFAULT_THRESHOLD,
             **attrs
         }
         super().__init__(args, attrs, name)
 
-    def generate_op(self):
+    @override
+    def generate_op(self) -> Any:
         i, dtype = self.args
         A = te.placeholder((i,), name="A")
         O = te.compute(
@@ -198,25 +227,30 @@ class OperatorRelu(Operator):
         )
         return A, O
 
-    def inputs_dims(self):
+    @override
+    def inputs_dims(self) -> tuple[tuple[int,...],...]:
         i, dtype = self.args
         return (i,),
 
-    def inputs_types(self):
+    @override
+    def inputs_types(self) -> tuple[str,...]:
         i, dtype = self.args
         return dtype,
 
-    def outputs_dims(self):
+    @override
+    def outputs_dims(self) -> tuple[tuple[int,...],...]:
         i, dtype = self.args
         return (i,),
 
-    def outputs_types(self):
+    @override
+    def outputs_types(self) -> tuple[str,...]:
         i, dtype = self.args
         return dtype,
 
-    def reference_impl(self, *args):
+    @override
+    def reference_impl(self, *args: Any) -> None:
         np.maximum(args[0], self.attrs["threshold"], out=args[1])
 
-class Operators():
-    matmul = OperatorMatmul
-    relu = OperatorRelu
+class TVMOperators():
+    matmul = TVMOperatorMatmul
+    relu = TVMOperatorRelu
