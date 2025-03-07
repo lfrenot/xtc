@@ -108,10 +108,7 @@ def schedule_operation(
     # Parse the scheduling attributes
     interchange = extract_string_list_from_attr(o,"loop.interchange")
     vectorize = extract_string_list_from_attr(o,"loop.vectorize")
-    if evaluate:
-        parallelize = []
-    else:
-        parallelize = extract_string_list_from_attr(o,"loop.parallelize")
+    parallelize = extract_string_list_from_attr(o,"loop.parallelize")
     unroll = extract_string_int_dict_from_attr(o,"loop.unroll")
 
     # Feed the scheduler
