@@ -23,6 +23,12 @@ variables:
 
 test-xtc:
   stage: test
+  rules:
+    # Avoid duplicate pipeline when in a merge request
+    # Runs only the merge_request_event pipeline
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS != null
+      when: never
+    - when: on_success
   script:
     - apt-get update
     - apt-get install -y build-essential libomp5 binutils-aarch64-linux-gnu
