@@ -24,6 +24,8 @@ variables:
 test-xtc:
   stage: test
   script:
+    - apt-get update
+    - apt-get install -y build-essential libomp5
     - echo "machine gitlab.inria.fr login gitlab-ci-token password $CI_JOB_TOKEN" >"$HOME"/.netrc
     - pip3 install -e .[dev]
     - pip3 install -r mlir_requirements.txt
