@@ -691,6 +691,7 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
         dump_file=dump_file,
         no_entry=True,
         bare_ptr=args.bare_ptr,
+        debug=args.debug_compile,
     )
     if args.dump:
         compile_args.update(dict(
@@ -1189,6 +1190,7 @@ def main():
     parser.add_argument("--execute", action=argparse.BooleanOptionalAction, default=True, help="do not execute, only compile")
     parser.add_argument("--mlir-prefix", type=str, help="MLIR install prefix, defaults to mlir package")
     parser.add_argument("--debug", action=argparse.BooleanOptionalAction, help="debug mode")
+    parser.add_argument("--debug-compile", action=argparse.BooleanOptionalAction, help="debug compile commands")
     parser.add_argument("--quiet", action=argparse.BooleanOptionalAction, help="quiet optionnal output and progress bar")
     parser.add_argument("--dump", action=argparse.BooleanOptionalAction, help="dump IR while generating")
     args = parser.parse_args()
