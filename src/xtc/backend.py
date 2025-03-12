@@ -2,12 +2,8 @@
 
 import argparse
 import os
-from xdsl.dialects import func, linalg
-from xtc.xdsl_aux import parse_xdsl_module
-from xtc.MlirModule import RawMlirModule
-from xtc.MlirNodeImplementer import MlirNodeImplementer
-from xtc.MlirGraphImplementer import MlirGraphImplementer
-from xtc.MlirCompiler import MlirCompiler
+from xtc.backends.mlir.MlirModule import RawMlirModule
+from xtc.backends.mlir.MlirCompiler import MlirModuleCompiler
 
 def main():
     parser = argparse.ArgumentParser(description='Blabla.')
@@ -29,12 +25,6 @@ def main():
         help="Print the source IR."
     )
     parser.add_argument(
-        "--print-transformed-ir",
-        action="store_true",
-        default = False,
-        help="Print the IR after application of the transform dialect."
-    )
-    parser.add_argument(
         "--print-lowered-ir",
         action="store_true",
         default = False,
@@ -48,7 +38,7 @@ def main():
     )
     parser.add_argument(
         "--color",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default = True,
         help="Allow colors."
     )
@@ -66,20 +56,17 @@ def main():
     with open(args.filename, 'r') as f:
         source = f.read()
     impl_module = RawMlirModule(source)
-    compiler = MlirCompiler(
-        mlir_module=impl_module,
-        mlir_install_dir=args.llvm_dir,
-    )
     print_source = args.print_source_ir or not (
-        args.print_transformed_ir
-        or args.print_lowered_ir
+        args.print_lowered_ir
         or args.print_assembly
     )
-    e = compiler.compile(
+    compiler = MlirModuleCompiler(
+        mlir_module=impl_module,
+        mlir_install_dir=args.llvm_dir,
         print_source_ir=print_source,
-        print_transformed_ir=args.print_transformed_ir,
         print_lowered_ir=args.print_lowered_ir,
         print_assembly=args.print_assembly,
         color=args.color,
         debug=args.debug,
     )
+    compiler.compile()
