@@ -158,7 +158,7 @@ def mlir_matmul_impl(i, j, k, ftype, graph):
             parallel_dims=node["parallel_dims"],
             reduction_dims=node["reduction_dims"],
             no_alias=True,
-            always_vectorize=True,
+            always_vectorize=False,
             id=f"__xtc_id_{ident}__",
         )
         for ident, node in graph["nodes"].items()
@@ -166,6 +166,8 @@ def mlir_matmul_impl(i, j, k, ftype, graph):
     impl = MlirGraphImplementer(
         xdsl_func=graph["payload"],
         nodes=list(mlir_nodes.values()),
+        no_alias=True,
+        always_vectorize=False,
     )
     compiler = MlirCompiler(
         mlir_module=impl,
