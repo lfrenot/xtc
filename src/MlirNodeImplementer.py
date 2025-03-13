@@ -95,8 +95,6 @@ class MlirNodeImplementer(MlirImplementer):
         tiles_names = []
         tiles_sizes = []
         for tile_name,tile_size in tiles.items():
-            if tile_size == 1:
-                tile_size = 0
             tiles_names.append(tile_name)
             tiles_sizes.append(tile_size)
         
