@@ -69,14 +69,9 @@ def schedule_operation(
         
     # Parse the initial specification
     dims: dict[str,int|None] = {}
-    if "loop.dims" in o.attributes:
-        for k,v in extract_string_int_dict_from_attr(o,"loop.dims").items():
-            dims[k] = v
-    elif "loop.tiles_names" in o.attributes:
-        for dim,ts in o.attributes["loop.tiles_names"].data.items():
-            dims[dim] = None
-    else:
-        assert False
+    assert "loop.dims" in o.attributes
+    for dim in extract_string_list_from_attr(o,"loop.dims"):
+        dims[dim] = None
     assert dims
     parallel_dims = extract_string_list_from_attr(o,"loop.parallel_dims")
     reduction_dims = extract_string_list_from_attr(o,"loop.reduction_dims")
