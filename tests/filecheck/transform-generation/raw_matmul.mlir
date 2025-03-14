@@ -26,4 +26,3 @@ func.func @myfun(
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-// CHECK-NEXT:  

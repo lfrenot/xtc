@@ -10,7 +10,8 @@ func.func @myfun(
   %cst = arith.constant 0.000000e+00 : f32
   linalg.fill
       {
-        loop.tiles_names = {"i" = [], "j" = ["j1"]},
+        loop.dims = ["i","j"],
+        loop.tiles_names = {"j" = ["j1"]},
         loop.tiles_sizes = {j1 = 8},
         loop.interchange = ["i","j","j1"],
         loop.vectorize = ["j1"]
@@ -28,6 +29,7 @@ func.func @myfun(
     iterator_types = ["parallel","parallel"]
   } ins(%Bquant : memref<512x256xi8>) outs(%B : memref<512x256xf32>)
   attrs = {
+      loop.dims = ["j","k"],
       loop.tiles_names = {"j" = ["j1"], "k" = ["k1"]},
       loop.tiles_sizes = {j1 = 64, k1 = 8},
       loop.interchange = ["k","j","k1","j1"],
@@ -48,6 +50,7 @@ func.func @myfun(
   // The matmul itself
   linalg.matmul
     {
+      loop.dims = ["i","j","k"],
       loop.tiles_names = {"i" = [], "j" = ["j1"], "k" = ["k1"]},
       loop.tiles_sizes = {j1 = 64, k1 = 8},
       loop.interchange = ["i","j","k","k1","j1"],
@@ -65,9 +68,9 @@ func.func @myfun(
 // CHECK-NEXT:  module attributes {transform.with_named_sequence} {
 // CHECK-NEXT:    func.func @myfun(%arg0: memref<256x512xf32> {llvm.noalias}, %arg1: memref<512x256xi8> {llvm.noalias}, %arg2: memref<256x256xf32> {llvm.noalias}) {
 // CHECK-NEXT:      %cst = arith.constant 0.000000e+00 : f32
-// CHECK-NEXT:      linalg.fill {__id0__, loop.interchange = ["i", "j", "j1"], loop.tiles_names = {i = [], j = ["j1"]}, loop.tiles_sizes = {j1 = 8 : i64}, loop.vectorize = ["j1"]} ins(%cst : f32) outs(%arg2 : memref<256x256xf32>)
+// CHECK-NEXT:      linalg.fill {__id0__} ins(%cst : f32) outs(%arg2 : memref<256x256xf32>)
 // CHECK-NEXT:      %alloc = memref.alloc() : memref<512x256xf32>
-// CHECK-NEXT:      linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg1 : memref<512x256xi8>) outs(%alloc : memref<512x256xf32>) attrs =  {__id1__, loop.interchange = ["k", "j", "k1", "j1"], loop.tiles_names = {j = ["j1"], k = ["k1"]}, loop.tiles_sizes = {j1 = 64 : i64, k1 = 8 : i64}, loop.unroll = {k1 = 8 : i64}, loop.vectorize = ["j1"]} {
+// CHECK-NEXT:      linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins(%arg1 : memref<512x256xi8>) outs(%alloc : memref<512x256xf32>) attrs =  {__id1__} {
 // CHECK-NEXT:      ^bb0(%in: i8, %out: f32):
 // CHECK-NEXT:        %cst_0 = arith.constant 1.000000e-01 : f32
 // CHECK-NEXT:        %c1_i32 = arith.constant 1 : i32
@@ -77,7 +80,7 @@ func.func @myfun(
 // CHECK-NEXT:        %3 = arith.mulf %2, %cst_0 : f32
 // CHECK-NEXT:        linalg.yield %3 : f32
 // CHECK-NEXT:      }
-// CHECK-NEXT:      linalg.matmul {__id2__, loop.interchange = ["i", "j", "k", "k1", "j1"], loop.tiles_names = {i = [], j = ["j1"], k = ["k1"]}, loop.tiles_sizes = {j1 = 64 : i64, k1 = 8 : i64}, loop.unroll = {k1 = 8 : i64}, loop.vectorize = ["j1"]} ins(%arg0, %alloc : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
+// CHECK-NEXT:      linalg.matmul {__id2__} ins(%arg0, %alloc : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
 // CHECK-NEXT:      memref.dealloc %alloc : memref<512x256xf32>
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
@@ -116,4 +119,3 @@ func.func @myfun(
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-// CHECK-NEXT:  
