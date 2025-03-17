@@ -11,9 +11,7 @@ func.func @myfun(
     outs(%C : memref<256x256xf32>)
   linalg.matmul
     {
-      loop.dims = {"i"=256,"j"=256,"k"=512},
-      loop.parallel_dims = ["i","j"],
-      loop.reduction_dims = ["k"],
+      loop.dims = ["i","j","k"],
       loop.tiles_names = {"i" = ["i1"], "j" = ["j1"], "k" = ["k1"]},
       loop.tiles_sizes = {i1 = 1, j1 = 16, k1 = 32},
       loop.interchange = ["i","j","k","i1","k1","j1"],
@@ -29,7 +27,7 @@ func.func @myfun(
 // CHECK-NEXT:    func.func @myfun(%arg0: memref<256x512xf32> {llvm.noalias}, %arg1: memref<512x256xf32> {llvm.noalias}, %arg2: memref<256x256xf32> {llvm.noalias}) {
 // CHECK-NEXT:      %cst = arith.constant 0.000000e+00 : f32
 // CHECK-NEXT:      linalg.fill ins(%cst : f32) outs(%arg2 : memref<256x256xf32>)
-// CHECK-NEXT:      linalg.matmul {__id0__, loop.dims = {i = 256 : i64, j = 256 : i64, k = 512 : i64}, loop.interchange = ["i", "j", "k", "i1", "k1", "j1"], loop.parallel_dims = ["i", "j"], loop.reduction_dims = ["k"], loop.tiles_names = {i = ["i1"], j = ["j1"], k = ["k1"]}, loop.tiles_sizes = {i1 = 1 : i64, j1 = 16 : i64, k1 = 32 : i64}, loop.unroll = {i1 = 1 : i64, k1 = 32 : i64}, loop.vectorize = ["j1"]} ins(%arg0, %arg1 : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
+// CHECK-NEXT:      linalg.matmul {__id0__} ins(%arg0, %arg1 : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
@@ -54,6 +52,6 @@ func.func @myfun(
 // CHECK-NEXT:      transform.loop.unroll %3 {factor = 32 : i64} : !transform.any_op
 // CHECK-NEXT:      %4 = transform.structured.match attributes {__id0__i1} in %2 : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      transform.loop.unroll %4 {factor = 1 : i64} : !transform.any_op
-// CHECK-NEXT:      transform.yield
+// CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

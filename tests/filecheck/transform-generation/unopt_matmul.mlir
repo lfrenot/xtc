@@ -7,11 +7,11 @@ func.func @myfun(
 ) {
   %cst = arith.constant 0.000000e+00 : f32
   linalg.fill
-    {loop.dims = {"i"=256,"j"=256}}
+    {loop.dims = ["i","j"]}
     ins(%cst : f32)
     outs(%C : memref<256x256xf32>)
   linalg.matmul
-    {loop.dims = {"i"=256,"j"=256,"k"=512}}
+    {loop.dims = ["i","j","k"]}
     ins(%A, %B : memref<256x512xf32>, memref<512x256xf32>)
     outs(%C : memref<256x256xf32>)
   return
@@ -20,8 +20,8 @@ func.func @myfun(
 // CHECK-NEXT:  module attributes {transform.with_named_sequence} {
 // CHECK-NEXT:    func.func @myfun(%arg0: memref<256x512xf32> {llvm.noalias}, %arg1: memref<512x256xf32> {llvm.noalias}, %arg2: memref<256x256xf32> {llvm.noalias}) {
 // CHECK-NEXT:      %cst = arith.constant 0.000000e+00 : f32
-// CHECK-NEXT:      linalg.fill {__id0__, loop.dims = {i = 256 : i64, j = 256 : i64}} ins(%cst : f32) outs(%arg2 : memref<256x256xf32>)
-// CHECK-NEXT:      linalg.matmul {__id1__, loop.dims = {i = 256 : i64, j = 256 : i64, k = 512 : i64}} ins(%arg0, %arg1 : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
+// CHECK-NEXT:      linalg.fill {__id0__} ins(%cst : f32) outs(%arg2 : memref<256x256xf32>)
+// CHECK-NEXT:      linalg.matmul {__id1__} ins(%arg0, %arg1 : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
@@ -41,4 +41,3 @@ func.func @myfun(
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-// CHECK-NEXT:  

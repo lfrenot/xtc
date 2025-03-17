@@ -11,7 +11,7 @@ func.func @myfun(
     outs(%C : memref<512x128xf32>)
   linalg.matmul
     {
-      loop.dims = {"i"=512,"j"=128,"k"=1024},
+      loop.dims = ["i","j","k"],
       loop.add_attributes = ["JoeDassin"]
     }
     ins(%A, %B : memref<512x1024xf32>, memref<1024x128xf32>)
@@ -56,4 +56,3 @@ func.func @myfun(
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-// CHECK-NEXT:  

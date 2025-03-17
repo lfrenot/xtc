@@ -7,11 +7,11 @@ func.func @myfun(
 ) {
   %cst = arith.constant 0.000000e+00 : f32
   linalg.fill
-    {loop.dims = {"i"=256,"j"=256}}
+    {loop.dims = ["i","j"]}
     ins(%cst : f32)
     outs(%C : memref<256x256xf32>)
   linalg.matmul
-    {loop.dims = {"i"=256,"j"=256,"k"=512}}
+    {loop.dims = ["i","j","k"]}
     ins(%A, %B : memref<256x512xf32>, memref<512x256xf32>)
     outs(%C : memref<256x256xf32>)
   return

@@ -8,6 +8,7 @@ func.func @myfun(
   %cst = arith.constant 0.000000e+00 : f32
   linalg.fill
     {
+      loop.dims = ["i","j"],
       loop.tiles_names = {"i" = ["i1"], "j" = ["j1"]},
       loop.tiles_sizes = {i1 = 4, j1 = 64},
       loop.interchange = ["i","j","i1","j1"],
@@ -18,6 +19,7 @@ func.func @myfun(
     outs(%C : memref<512x128xf32>)
   linalg.matmul
     {
+      loop.dims = ["i","j","k"],
       loop.tiles_names = {"i" = ["i1"], "j" = ["j1"], "k" = ["k1"]},
       loop.tiles_sizes = {i1 = 4, j1 = 64, k1 = 8},
       loop.interchange = ["i","j","k","k1","i1","j1"],
@@ -32,8 +34,8 @@ func.func @myfun(
 // CHECK-NEXT:  module attributes {transform.with_named_sequence} {
 // CHECK-NEXT:    func.func @myfun(%arg0: memref<512x1024xf32> {llvm.noalias}, %arg1: memref<1024x128xf32> {llvm.noalias}, %arg2: memref<512x128xf32> {llvm.noalias}) {
 // CHECK-NEXT:      %cst = arith.constant 0.000000e+00 : f32
-// CHECK-NEXT:      linalg.fill {__id0__, loop.interchange = ["i", "j", "i1", "j1"], loop.tiles_names = {i = ["i1"], j = ["j1"]}, loop.tiles_sizes = {i1 = 4 : i64, j1 = 64 : i64}, loop.unroll = {i1 = 4 : i64}, loop.vectorize = ["j1"]} ins(%cst : f32) outs(%arg2 : memref<512x128xf32>)
-// CHECK-NEXT:      linalg.matmul {__id1__, loop.interchange = ["i", "j", "k", "k1", "i1", "j1"], loop.tiles_names = {i = ["i1"], j = ["j1"], k = ["k1"]}, loop.tiles_sizes = {i1 = 4 : i64, j1 = 64 : i64, k1 = 8 : i64}, loop.unroll = {i1 = 4 : i64, k1 = 8 : i64}, loop.vectorize = ["j1"]} ins(%arg0, %arg1 : memref<512x1024xf32>, memref<1024x128xf32>) outs(%arg2 : memref<512x128xf32>)
+// CHECK-NEXT:      linalg.fill {__id0__} ins(%cst : f32) outs(%arg2 : memref<512x128xf32>)
+// CHECK-NEXT:      linalg.matmul {__id1__} ins(%arg0, %arg1 : memref<512x1024xf32>, memref<1024x128xf32>) outs(%arg2 : memref<512x128xf32>)
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
@@ -70,4 +72,3 @@ func.func @myfun(
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-// CHECK-NEXT:  

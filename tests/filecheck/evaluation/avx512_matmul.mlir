@@ -8,9 +8,7 @@ func.func @myfun(
   %cst = arith.constant 0.000000e+00 : f32
   linalg.fill
     {
-      loop.dims = {"i"=512,"j"=128},
-      loop.parallel_dims = ["i","j"],
-      loop.reduction_dims = [],
+      loop.dims = ["i","j"],
       loop.tiles_names = {"i" = ["i1"], "j" = ["j1"]},
       loop.tiles_sizes = {i1 = 4, j1 = 64},
       loop.interchange = ["i","j","i1","j1"],
@@ -22,9 +20,7 @@ func.func @myfun(
     outs(%C : memref<512x128xf32>)
   linalg.matmul
     {
-      loop.dims = {"i"=512,"j"=128,"k"=1024},
-      loop.parallel_dims = ["i","j"],
-      loop.reduction_dims = ["k"],
+      loop.dims = ["i","j","k"],
       loop.tiles_names = {"i" = ["i1"], "j" = ["j1"], "k" = ["k1"]},
       loop.tiles_sizes = {i1 = 4, j1 = 64, k1 = 8},
       loop.interchange = ["i","j","k","k1","i1","j1"],
