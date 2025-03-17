@@ -726,7 +726,7 @@ def load_and_evaluate_one(ident, backend, module_compiler, dump_file, in_x, args
         min_repeat_ms=args.min_repeat_ms,
         validate=args.validate,
         parameters=args.eval_parameters,
-        reference=reference_impl,
+        reference_impl=reference_impl,
     )
     if module is not None:
         payload_lib = module.file_name

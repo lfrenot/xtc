@@ -17,8 +17,6 @@ from xtc.evaluator import Evaluator, Executor
 from .TVMOps import TVMOperation, TVMOperators
 from .TVMScheduler import TVMScheduler
 from .TVMCompiler import TVMCompiler
-from .TVMModule import TVMModule
-from .TVMEvaluator import TVMEvaluator
 
 __all__ = [
     "TVMImplementer",
