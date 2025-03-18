@@ -236,30 +236,8 @@ class MlirNodeImplementer(MlirImplementer):
 
     @override
     def check_consistency(self):
+        # TODO: create asserts on input parameters
         pass
-    
-        # # Check the tiling
-        # all_dims_sizes = {}
-        # for dim, tiles in self.tiles.items():
-        #     assert dim in self.dims
-        #     divided_dim = self.dims[dim]
-        #     for tile_name,tile_size in tiles.items():
-        #         if tile_size == 1:
-        #               tile_size = divided_dim
-        #         assert  self.dims[dim] >= tile_size
-        #         if tile_size > 0:
-        #             assert  self.dims[dim] % tile_size == 0
-        #             divided_dim = divided_dim // tile_size
-        #         all_dims_sizes[tile_name] = tile_size
-                
-        # Check the unrolling
-        # TODO bug: the sizes in self.tiles are not the size of
-        # the dim, but the size of the upper tile of the dim.
-        # for dim, ufactor in self.unrolling.items():
-        #     assert dim in all_dims_sizes
-        #     dim_size = all_dims_sizes[dim]
-        #     assert dim_size >= ufactor
-        #     assert dim_size % ufactor == 0
     
     @classmethod
     def _np_types_spec(
