@@ -1,5 +1,6 @@
 from typing import cast
 from typing_extensions import override
+from typing import Tuple,Any
 import numpy as np
 
 from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
@@ -12,7 +13,7 @@ from mlir.dialects.transform import (
     structured,
 )
 from mlir.dialects.transform.loop import loop_unroll
-from mlir.ir import UnitAttr
+from mlir.ir import UnitAttr, OpResult
 from xdsl_aux import xdsl_operator_to_function
 from MlirImplementer import MlirImplementer
 
@@ -25,14 +26,7 @@ class MlirNodeImplementer(MlirImplementer):
     def __init__(
         self,
         source_op: xdslOperation,
-            
-        # TODO: Should become a list.
-        dims: dict[str, int | None],
-            
-        # TODO: Useless. Should be removed.
-        parallel_dims: list[str],
-        reduction_dims: list[str],
-
+        dims: list[str],
         payload_name: str = "f",
         concluding_passes: list[str] = [],
         loop_stamps: list[str] = [],
@@ -59,13 +53,14 @@ class MlirNodeImplementer(MlirImplementer):
         self.source_op = source_op
         # Specification of transformations
         self.loop_stamps = loop_stamps
-        self.dims = list(dims.keys())
+        self.dims = dims
         self.tiles = {k: {k: 1} for k in self.dims}
         self.permutation = self.get_default_interchange()
         self.vectorization = []
         self.parallelization = []
         self.unrolling: dict[str, int] = dict([])
 
+    @override
     def string_of_schedule(self) -> str:
         return (f"dims: {self.dims},"
                 + f"tiles: {self.tiles},"
@@ -153,10 +148,11 @@ class MlirNodeImplementer(MlirImplementer):
             if not dim in self.vectorization:
                 self.unrolling[dim] = ufactor
 
-    def needs_vectorization(self):
+    @override
+    def needs_vectorization(self) -> bool:
         return len(self.vectorization) > 0
         
-    def generate_node_tiling(self, handle):
+    def generate_node_tiling(self, handle: OpResult):
         # Produce the sequence of commands needed for the tiling
         tiling_arrays: dict[str, list[int]] = {}
         deepest_tiling = max(self.tiles.values(), key=len)
@@ -212,7 +208,7 @@ class MlirNodeImplementer(MlirImplementer):
 
         return outer_loop
 
-    def generate_node_unroll(self, handle):
+    def generate_node_unroll(self, handle: OpResult):
         for dim, factor in self.unrolling.items():
             match0 = structured_match(
                 results_=transform.AnyOpType.get(),
@@ -225,11 +221,12 @@ class MlirNodeImplementer(MlirImplementer):
             loop_unroll(match0, factor)
 
     @override
-    def generate_unroll(self, handle):
+    def generate_unroll(self, handle: OpResult):
         self.generate_node_unroll(handle)
 
     @override
     def generate_tiling(self):
+        assert self.named_sequence
         match0 = structured_match(
             results_=transform.AnyOpType.get(),
             target=self.named_sequence.bodyTarget,
@@ -239,30 +236,8 @@ class MlirNodeImplementer(MlirImplementer):
 
     @override
     def check_consistency(self):
+        # TODO: create asserts on input parameters
         pass
-    
-        # # Check the tiling
-        # all_dims_sizes = {}
-        # for dim, tiles in self.tiles.items():
-        #     assert dim in self.dims
-        #     divided_dim = self.dims[dim]
-        #     for tile_name,tile_size in tiles.items():
-        #         if tile_size == 1:
-        #               tile_size = divided_dim
-        #         assert  self.dims[dim] >= tile_size
-        #         if tile_size > 0:
-        #             assert  self.dims[dim] % tile_size == 0
-        #             divided_dim = divided_dim // tile_size
-        #         all_dims_sizes[tile_name] = tile_size
-                
-        # Check the unrolling
-        # TODO bug: the sizes in self.tiles are not the size of
-        # the dim, but the size of the upper tile of the dim.
-        # for dim, ufactor in self.unrolling.items():
-        #     assert dim in all_dims_sizes
-        #     dim_size = all_dims_sizes[dim]
-        #     assert dim_size >= ufactor
-        #     assert dim_size % ufactor == 0
     
     @classmethod
     def _np_types_spec(
@@ -280,18 +255,18 @@ class MlirNodeImplementer(MlirImplementer):
 
     @override
     def np_inputs_spec(self):
-        list_attr_tys = [i.type for i in self.source_op.inputs]
+        list_attr_tys = [i.type for i in self.source_op.operands]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
     @override
     def np_outputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:
-        list_attr_tys = [i.type for i in self.source_op.outputs]
+        list_attr_tys = [i.type for i in self.source_op.results]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
     @override
-    def reference_impl(self, *operands):
+    def reference_impl(self, *operands: Tuple[Any]):
         if self.source_op.name == "linalg.matmul":
             np.matmul(operands[0], operands[1], out=operands[2])
         else:

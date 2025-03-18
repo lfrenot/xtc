@@ -1,10 +1,12 @@
-from typing import cast
+from typing import cast,Tuple,Any
 from typing_extensions import override
 from xdsl.dialects import func as xdslfunc
 from xdsl.ir import Block as xdslBlock
-from mlir.dialects.transform.structured import structured_match
+from mlir.dialects.transform.structured import (
+    structured_match
+)
 from mlir.dialects import transform
-from mlir.ir import UnitAttr
+from mlir.ir import UnitAttr,OpResult
 
 from MlirNodeImplementer import MlirNodeImplementer
 from MlirImplementer import MlirImplementer
@@ -32,19 +34,20 @@ class MlirGraphImplementer(MlirImplementer):
             no_alias = no_alias,
         )
 
-    def string_of_schedule(self):
+    @override
+    def string_of_schedule(self) -> str:
         res = ""
         for impl in self.nodes.values():
             res += impl.string_of_schedule() + "\n"
         return res
         
     @override
-    def generate_unroll(self, handle):
+    def generate_unroll(self, handle: OpResult):
         for _, impl in self.nodes.items():
             impl.generate_node_unroll(handle)
 
     @override
-    def needs_vectorization(self):
+    def needs_vectorization(self) -> bool:
         for impl in self.nodes.values():
             if impl.needs_vectorization():
                 return True
@@ -58,6 +61,7 @@ class MlirGraphImplementer(MlirImplementer):
     @override
     def generate_tiling(self):
         assert len(self.nodes), "Tiling means nothing on zero operators"
+        assert self.named_sequence
         handle = None
         for _, impl in self.nodes.items():
             match0 = structured_match(
@@ -79,5 +83,5 @@ class MlirGraphImplementer(MlirImplementer):
         pass
 
     @override
-    def reference_impl(self, *operands):
+    def reference_impl(self, *operands: Tuple[Any]):
         assert False, "Implementation missing"
