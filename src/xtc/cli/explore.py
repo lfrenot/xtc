@@ -77,8 +77,8 @@ from xtc.utils.math import (
     factors_to_sizes,
     factors_enumeration,
 )
-from xtc.ndarray import NDArray
-import xtc.runtime as runtime
+from xtc.runtimes.types.ndarray import NDArray
+import xtc.runtimes.host.runtime as runtime
 
 logger = logging.getLogger(__name__)
 

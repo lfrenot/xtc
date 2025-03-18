@@ -1,13 +1,12 @@
 from typing import Any
-from pathlib import Path
 import numpy as np
 import numpy.typing
+from pathlib import Path
 
-from xtc.ndarray import NDArray
-from xtc.utils.loader import (
-    LibLoader,
-)
-import xtc.evaluator
+from xtc.utils.loader import LibLoader
+from xtc.runtimes.types.ndarray import NDArray
+
+from .evaluator import Executor, Evaluator
 
 def load_and_evaluate(
         module_file: str,
@@ -29,12 +28,12 @@ def load_and_evaluate(
         assert func is not None, f"Cannot find symbol {sym} in lib {dll}"
         func.packed = not bare_ptr
         if validate:
-            exec_func = xtc.evaluator.Executor(func)
+            exec_func = Executor(func)
             exec_func(*parameters[0], *parameters[1])
             for out_ref, out in zip(ref_outputs, [out.numpy() for out in parameters[1]]):
                 if not np.allclose(out_ref, out):
                     return [], 1, "Error in validation: outputs differ"
-        eval_func = xtc.evaluator.Evaluator(
+        eval_func = Evaluator(
             func,
             repeat=repeat,
             min_repeat_ms=min_repeat_ms,

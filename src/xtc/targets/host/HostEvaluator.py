@@ -2,11 +2,11 @@ from typing import Any
 from typing_extensions import override
 import numpy as np
 
-from xtc.ndarray import NDArray
+from xtc.runtimes.types.ndarray import NDArray
 from xtc.utils.numpy import (
     np_init,
 )
-from xtc.backends.utils.exec import load_and_evaluate, load_and_execute
+from xtc.runtimes.host.evaluate import load_and_evaluate, load_and_execute
 
 import xtc.itf as itf
 import xtc.targets.host as host

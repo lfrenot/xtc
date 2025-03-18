@@ -21,7 +21,11 @@ platforms = ["Linux"]
 zip-safe = false
 
 [tool.setuptools.package-data]
-xtc = ["py.typed", "ctools/**", "templates/**"]
+xtc = [
+    "py.typed",
+    "csrcs/**",
+    "templates/**",
+]
 
 [project.scripts]
 mlir-loop = "xtc.cli.mlir_loop:main"

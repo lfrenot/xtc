@@ -1,7 +1,10 @@
 import numpy as np
 import ctypes
 
-import xtc.runtime as runtime
+from .runtime import (
+    evaluate,
+    evaluate_packed,
+)
 
 __all__ = [
     "Evaluator",
@@ -92,7 +95,7 @@ class Evaluator():
         if self.cfunc.is_packed:
             args_array = (CArgValue * len(args_tuples))(*[arg[0] for arg in args_tuples])
             args_codes = (CArgCode * len(args_tuples))(*[arg[1] for arg in args_tuples])
-            runtime.evaluate_packed(
+            evaluate_packed(
                 ctypes.cast(results_array, ctypes.POINTER(ctypes.c_double)),
                 ctypes.c_int(self.repeat),
                 ctypes.c_int(self.number),
@@ -104,7 +107,7 @@ class Evaluator():
             )
         else:
             args_array = (ctypes.c_voidp * len(args_tuples))(*[arg[0] for arg in args_tuples])
-            runtime.evaluate(
+            evaluate(
                 ctypes.cast(results_array, ctypes.POINTER(ctypes.c_double)),
                 ctypes.c_int(self.repeat),
                 ctypes.c_int(self.number),

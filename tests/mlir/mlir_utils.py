@@ -4,7 +4,7 @@ import numpy as np
 from xtc.utils.numpy import (
     np_init,
 )
-from xtc.ndarray import NDArray
+from xtc.runtimes.types.ndarray import NDArray
 
 def requires_mlir(*arg):
     import pytest

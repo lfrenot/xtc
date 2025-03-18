@@ -11,8 +11,6 @@ from jir.backend.xdsl.compiler import PolygeistCompiler
 from xtc.utils.tools import (
     get_geist_prefix,
 )
-from xtc.evaluator import Evaluator, Executor
-from xtc.ndarray import NDArray
 
 import xtc.itf as itf
 

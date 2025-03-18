@@ -5,9 +5,9 @@ __all__ = [
     "NDArray",
 ]
 
-from xtc.runtime_types import DLDevice, DLDeviceTypeCode, DLDataType, DLDataTypeCode, DLTensor, CNDArray
+from .dlpack import DLDevice, DLDeviceTypeCode, DLDataType, DLDataTypeCode, DLTensor, CNDArray
 
-import xtc.runtime as runtime
+import xtc.runtimes.host.runtime as runtime
 
 class NDArray():
     np_dtype_map = {
@@ -49,7 +49,7 @@ class NDArray():
         self._copy_to(self.handle,
                       nparray.ctypes.data_as(ctypes.c_voidp))
         return nparray
-        
+
     def numpy(self):
         return self._to_numpy()
 
@@ -84,7 +84,7 @@ class NDArray():
     @property
     def data(self):
         return self.handle.contents.dl_tensor.data
-    
+
     @classmethod
     def _copy_from(cls, handle, data_handle):
         runtime.cndarray_copy_from_data(
@@ -98,7 +98,7 @@ class NDArray():
             handle,
             data_handle,
         )
-        
+
     @classmethod
     def _dldatatype(cls, np_dtype):
         assert np_dtype in cls.np_dtype_map
@@ -129,20 +129,3 @@ class NDArray():
     def set_alloc_alignment(cls, alignment):
         runtime.cndarray_set_alloc_alignment(alignment)
 
-
-def test_ndarray():
-    alignment = 2 * 1024 * 1024
-    NDArray.set_alloc_alignment(alignment)
-    I, J = 100, 200
-    shape = (100, 200)
-    npin = np.arange(I*J).reshape(shape).astype("float32")
-    print(f"Init NPArray: dims = {len(npin.shape)}, shape = {npin.shape}, dtype = {npin.dtype}, data = {npin.data}")
-    array = NDArray(npin)
-    print(f"To NDArray: dims = {array.dims}, shape = {array.shape}, dtype = {array.dtype}, size = {array.size}, data = {array.data}")
-    npout = array.numpy()
-    print(f"To NPArray: dims = {len(npout.shape)}, shape = {npout.shape}, dtype = {npout.dtype}, data = {npout.data}")
-    assert np.array_equal(npin, npout)
-    assert array.data % alignment == 0
-
-if __name__ == "__main__":
-    test_ndarray()
