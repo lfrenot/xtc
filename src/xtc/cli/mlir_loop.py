@@ -11,7 +11,7 @@ from xdsl.ir import (
     Data,
 )
 
-from xtc.xdsl_aux import parse_xdsl_module
+from xtc.utils.xdsl_aux import parse_xdsl_module
 from xtc.backends.mlir import MlirModule
 from xtc.backends.mlir import MlirScheduler
 from xtc.backends.mlir import MlirNodeImplementer

@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 from typing_extensions import override
 from pathlib import Path
 from copy import deepcopy
@@ -18,7 +18,6 @@ from jir.backend.xdsl.compiler import (
     MLIRLowering,
     MLIR2LLVMConversion,
     LLVMSharedLibraryCompiler,
-    PolygeistCompiler,
 )
 from jir.backend.util.merge_mlir_modules import merge_mlir_modules_by_content
 from jir.transform.primitives.canonicalize import canonicalize
@@ -32,7 +31,7 @@ import xtc.itf as itf
 from xtc.utils.tools import (
     get_mlir_prefix,
 )
-from xtc.ext_tools import (
+from xtc.utils.ext_tools import (
     cc_bin,
     llc_opts,
     opt_opts,
