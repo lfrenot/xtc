@@ -29,7 +29,9 @@ from xtc.targets.host import HostModule
 import xtc.backends.jir as backend
 import xtc.itf as itf
 
-import xtc.utils as utils
+from xtc.utils.tools import (
+    get_mlir_prefix,
+)
 from xtc.ext_tools import (
     cc_bin,
     llc_opts,
@@ -94,7 +96,7 @@ class JIRCompiler(itf.comp.Compiler):
         self.executable = kwargs.get("executable", False)
         assert not self.executable, f"executable generation not supported yet for TVM"
         assert self.shared_lib, f"shared_lib generation is mandatory for TVM"
-        self.mlir_install_dir = utils.get_mlir_prefix()
+        self.mlir_install_dir = get_mlir_prefix()
         self._jir_llvm_config = f"{self.mlir_install_dir}/bin/llvm-config"
         self._target_triple = kwargs.get(
             "target_triple",

@@ -69,7 +69,14 @@ import multiprocessing
 import time
 from pathlib import Path
 
-import xtc.utils as utils
+from xtc.utils.numpy import (
+    np_init,
+)
+from xtc.utils.math import (
+    mulall,
+    factors_to_sizes,
+    factors_enumeration,
+)
 from xtc.ndarray import NDArray
 import xtc.runtime as runtime
 
@@ -259,7 +266,7 @@ def tvm_relu_impl(i, ftype, graph):
 
 def tile_strategy_1d(impl, op_args, in_x):
     i, dtype = op_args
-    tiles_i = utils.factors_to_sizes(in_x[0:1])
+    tiles_i = factors_to_sizes(in_x[0:1])
     tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
     axes_order = ["i", "i1"]
     vector_axes = axes_order[-1:]
@@ -294,9 +301,9 @@ def tile_strategy_3d(impl, op_args, in_x):
     # TODO: generalize: no need to be matmul specific as soon as
     # we have axes names
     i, j, k, dtype = op_args
-    tiles_i = utils.factors_to_sizes(in_x[0:1])
-    tiles_j= utils.factors_to_sizes(in_x[1:2])
-    tiles_k = utils.factors_to_sizes(in_x[2:3])
+    tiles_i = factors_to_sizes(in_x[0:1])
+    tiles_j= factors_to_sizes(in_x[1:2])
+    tiles_k = factors_to_sizes(in_x[2:3])
     tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
     tiles_j_dict = {f"j{i+1}": v for i, v in enumerate(tiles_j)}
     tiles_k_dict = {f"k{i+1}": v for i, v in enumerate(tiles_k)}
@@ -335,7 +342,7 @@ def tile_schedule_default_3d(opt_level, op_args):
 
 def tile_generator_1d(op_args, size=None):
     i, dtype = op_args
-    tiles_i = [t[0] for t in utils.factors_enumeration(i, 1)]
+    tiles_i = [t[0] for t in factors_enumeration(i, 1)]
     all_tiles = [tiles_i]
     all_in_x = list(itertools.product(*all_tiles))
     logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}")
@@ -345,14 +352,14 @@ def tile_generator_1d(op_args, size=None):
 
 def tile_generator_3d(op_args, size=None):
     i, j, k, dtype = op_args
-    tiles_i = [t[0] for t in utils.factors_enumeration(i, 1)]
-    tiles_j = [t[0] for t in utils.factors_enumeration(j, 1)]
-    tiles_k = [t[0] for t in utils.factors_enumeration(k, 1)]
+    tiles_i = [t[0] for t in factors_enumeration(i, 1)]
+    tiles_j = [t[0] for t in factors_enumeration(j, 1)]
+    tiles_k = [t[0] for t in factors_enumeration(k, 1)]
     all_tiles = [tiles_i, tiles_j, tiles_k]
     all_in_x = list(itertools.product(*all_tiles))
     logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     # Filter out last level if > 1024 vector elems
-    all_in_x = [x for x in all_in_x if utils.mulall(x)/min(x[1], VEC_SIZE) <= MAX_UNROLL]
+    all_in_x = [x for x in all_in_x if mulall(x)/min(x[1], VEC_SIZE) <= MAX_UNROLL]
     logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     return np.array(all_in_x)
 
@@ -408,16 +415,16 @@ def tile_schedule_default_4d(opt_level, op_args):
 
 def tile_generator_4d(op_args, size=None):
     i, j, k, dtype = op_args
-    tiles_i = [t[0] for t in utils.factors_enumeration(i, 1)]
-    tiles_j = [t[0] for t in utils.factors_enumeration(j, 1)]
-    tiles_k = [t[0] for t in utils.factors_enumeration(k, 1)]
+    tiles_i = [t[0] for t in factors_enumeration(i, 1)]
+    tiles_j = [t[0] for t in factors_enumeration(j, 1)]
+    tiles_k = [t[0] for t in factors_enumeration(k, 1)]
     orders = list(range(6)) # 6 permutations for 3 axes
     all_tiles = [tiles_i, tiles_j, tiles_k, orders]
     all_in_x = list(itertools.product(*all_tiles))
     logger.debug(f"Total space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     # Filter out last level if > 1024 vector elems.
     # x[1] is the tile size for the vector axis, x[-1] in [1, 4] is true when the vector axis is inner
-    all_in_x = [x for x in all_in_x if utils.mulall(x[:-1])/min(x[1], max((x[-1] in [1, 4])*VEC_SIZE, 1)) <= MAX_UNROLL]
+    all_in_x = [x for x in all_in_x if mulall(x[:-1])/min(x[1], max((x[-1] in [1, 4])*VEC_SIZE, 1)) <= MAX_UNROLL]
     logger.debug(f"Filtered space size: {len(all_in_x)} for problem dims: {i}x{j}x{k}")
     return np.array(all_in_x)
 
@@ -435,9 +442,9 @@ def tile_strategy_7d(impl, op_args, in_x):
     # actually PPRPRP -> i j i1 j1 k i2 j2 k1 i3 j3
     # where the input vector is: i1 i2 i3 j1 j2 j3 k1
     i, j, k, dtype = op_args
-    tiles_i = utils.factors_to_sizes(in_x[0:3])
-    tiles_j= utils.factors_to_sizes(in_x[3:6])
-    tiles_k = utils.factors_to_sizes(in_x[6:7])
+    tiles_i = factors_to_sizes(in_x[0:3])
+    tiles_j= factors_to_sizes(in_x[3:6])
+    tiles_k = factors_to_sizes(in_x[6:7])
     tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
     tiles_j_dict = {f"j{i+1}": v for i, v in enumerate(tiles_j)}
     tiles_k_dict = {f"k{i+1}": v for i, v in enumerate(tiles_k)}
@@ -467,9 +474,9 @@ def tile_strategy_7d_wc(impl, op_args, in_x):
     # where the input vector is: i1 i2 i3 j1 j2 j3 k1
     # and where | is the write cache location
     i, j, k, dtype = op_args
-    tiles_i = utils.factors_to_sizes(in_x[0:3])
-    tiles_j= utils.factors_to_sizes(in_x[3:6])
-    tiles_k = utils.factors_to_sizes(in_x[6:7])
+    tiles_i = factors_to_sizes(in_x[0:3])
+    tiles_j= factors_to_sizes(in_x[3:6])
+    tiles_k = factors_to_sizes(in_x[6:7])
     tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
     tiles_j_dict = {f"j{i+1}": v for i, v in enumerate(tiles_j)}
     tiles_k_dict = {f"k{i+1}": v for i, v in enumerate(tiles_k)}
@@ -508,7 +515,7 @@ def tile_schedule_default_7d(opt_level, op_args):
     def sched_o3():
         jtile = VEC_SIZE * 4
         itile = 4
-        ktiles = utils.factors_enumeration(k, 1)
+        ktiles = factors_enumeration(k, 1)
         ktile = [x[0] for x in ktiles if x[0] <= 16][-1]
         idiv = i >= itile and i % itile == 0
         jdiv = j >= jtile and j % jtile == 0
@@ -540,9 +547,9 @@ def tile_strategy_8d(impl, op_args, in_x):
 
 def tile_generator_7d(op_args, size=None):
     i, j, k, dtype = op_args
-    tiles_i = utils.factors_enumeration(i, 3)
-    tiles_j = utils.factors_enumeration(j, 3)
-    tiles_k = utils.factors_enumeration(k, 1)
+    tiles_i = factors_enumeration(i, 3)
+    tiles_j = factors_enumeration(j, 3)
+    tiles_k = factors_enumeration(k, 1)
     all_tiles = tiles_i + tiles_j + tiles_k
     space_size = len(tiles_i) * len(tiles_j) * len(tiles_k)
     logger.debug(f"Raw space size: {space_size} for problem dims: {i}x{j}x{k}")
@@ -645,7 +652,7 @@ def get_eval_parameters(args):
             "dtype": dtype,
         }
         for shape in outputs]
-    nd_inputs = [NDArray(utils.np_init(**spec)) for spec in inputs_spec]
+    nd_inputs = [NDArray(np_init(**spec)) for spec in inputs_spec]
     nd_outputs = [NDArray(np.empty(**spec)) for spec in outputs_spec]
     return (nd_inputs, nd_outputs)
 
@@ -944,7 +951,7 @@ def peak_time(args):
     dtype = DTYPES_MAP[args.dtype]
     flops = runtime.evaluate_flops(dtype)
     assert flops != 0, f"unable to evaluate machine flops for type {dtype}"
-    flop = utils.mulall(args.dims)
+    flop = mulall(args.dims)
     time = flop / flops / args.threads
     return time
 

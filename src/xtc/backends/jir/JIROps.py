@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 from typing_extensions import override
 from typing import Any, Type
 import numpy as np
-import xtc.utils as utils
+from xtc.utils.text import (
+    Replace
+)
 
 __all__ = [
     "JIROperation",
@@ -116,7 +118,7 @@ function {{name}}
             {{op_name}}(O, A, B)
   }
 """
-    _re_replace = utils.Replace(["name", "ctype", "ftype", "op_name_0", "op_name"])
+    _re_replace = Replace(["name", "ctype", "ftype", "op_name_0", "op_name"])
 
     @override
     def generate_op(self) -> Any:

@@ -8,7 +8,9 @@ from jir.backend.util.annotate_fastmath import annotate_fastmath
 from jir.parser import JIRParser
 from jir.backend.xdsl.compiler import PolygeistCompiler
 
-import xtc.utils as utils
+from xtc.utils.tools import (
+    get_geist_prefix,
+)
 from xtc.evaluator import Evaluator, Executor
 from xtc.ndarray import NDArray
 
@@ -34,7 +36,7 @@ class JIRImplementer(itf.impl.Implementer):
         self.source_op = source_op
         self.args = self.source_op.args
         self.dims = dims
-        self._geist_install_dir = utils.get_geist_prefix()
+        self._geist_install_dir = get_geist_prefix()
         self._op_function_str, self._jir_function_str = self.source_op.generate()
         self._jir_function_op = self._parse_function(self._jir_function_str)
         self._op_function_mlir = self._parse_primitives(self._op_function_str)

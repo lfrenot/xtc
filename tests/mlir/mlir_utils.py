@@ -1,7 +1,9 @@
 
 import numpy as np
 
-import xtc.utils as utils
+from xtc.utils.numpy import (
+    np_init,
+)
 from xtc.ndarray import NDArray
 
 def requires_mlir(*arg):
@@ -105,7 +107,7 @@ def get_matmul_params(i, j, k, dtype):
     inputs_shapes = ((i, k), (k, j))
     outputs_shapes = ((i, j),)
     inputs = [
-        utils.np_init(shape=shape, dtype=dtype)
+        np_init(shape=shape, dtype=dtype)
         for shape in inputs_shapes
     ]
     outputs = [

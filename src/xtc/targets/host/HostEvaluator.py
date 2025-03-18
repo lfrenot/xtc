@@ -3,7 +3,9 @@ from typing_extensions import override
 import numpy as np
 
 from xtc.ndarray import NDArray
-import xtc.utils as utils
+from xtc.utils.numpy import (
+    np_init,
+)
 from xtc.backends.utils.exec import load_and_evaluate, load_and_execute
 
 import xtc.itf as itf
@@ -40,7 +42,7 @@ class HostEvaluator(itf.exec.Evaluator):
             inputs_spec = self._np_inputs_spec()
             outputs_spec = self._np_outputs_spec()
             out_init = np.zeros if self._init_zero else np.empty
-            inputs = [utils.np_init(**spec) for spec in inputs_spec]
+            inputs = [np_init(**spec) for spec in inputs_spec]
             outputs = [out_init(**spec) for spec in outputs_spec]
             parameters = (
                 [NDArray(inp) for inp in inputs],
