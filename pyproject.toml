@@ -29,7 +29,12 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pyright]
-include = ["src"]
+include = [
+        "src/MlirModule.py",
+        "src/MlirImplementer.py",
+        "src/MlirGraphImplementer.py",
+        "src/MlirNodeImplementer.py",
+]
 reportMissingParameterType = "error"
 reportMissingTypeArgument = "error"
 reportImplicitOverride = "error"

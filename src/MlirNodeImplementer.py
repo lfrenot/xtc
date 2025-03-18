@@ -1,5 +1,6 @@
 from typing import cast
 from typing_extensions import override
+from typing import Tuple,Any
 import numpy as np
 
 from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
@@ -12,7 +13,7 @@ from mlir.dialects.transform import (
     structured,
 )
 from mlir.dialects.transform.loop import loop_unroll
-from mlir.ir import UnitAttr
+from mlir.ir import UnitAttr, OpResult
 from xdsl_aux import xdsl_operator_to_function
 from MlirImplementer import MlirImplementer
 
@@ -59,6 +60,7 @@ class MlirNodeImplementer(MlirImplementer):
         self.parallelization = []
         self.unrolling: dict[str, int] = dict([])
 
+    @override
     def string_of_schedule(self) -> str:
         return (f"dims: {self.dims},"
                 + f"tiles: {self.tiles},"
@@ -146,10 +148,11 @@ class MlirNodeImplementer(MlirImplementer):
             if not dim in self.vectorization:
                 self.unrolling[dim] = ufactor
 
-    def needs_vectorization(self):
+    @override
+    def needs_vectorization(self) -> bool:
         return len(self.vectorization) > 0
         
-    def generate_node_tiling(self, handle):
+    def generate_node_tiling(self, handle: OpResult):
         # Produce the sequence of commands needed for the tiling
         tiling_arrays: dict[str, list[int]] = {}
         deepest_tiling = max(self.tiles.values(), key=len)
@@ -205,7 +208,7 @@ class MlirNodeImplementer(MlirImplementer):
 
         return outer_loop
 
-    def generate_node_unroll(self, handle):
+    def generate_node_unroll(self, handle: OpResult):
         for dim, factor in self.unrolling.items():
             match0 = structured_match(
                 results_=transform.AnyOpType.get(),
@@ -218,11 +221,12 @@ class MlirNodeImplementer(MlirImplementer):
             loop_unroll(match0, factor)
 
     @override
-    def generate_unroll(self, handle):
+    def generate_unroll(self, handle: OpResult):
         self.generate_node_unroll(handle)
 
     @override
     def generate_tiling(self):
+        assert self.named_sequence
         match0 = structured_match(
             results_=transform.AnyOpType.get(),
             target=self.named_sequence.bodyTarget,
@@ -273,18 +277,18 @@ class MlirNodeImplementer(MlirImplementer):
 
     @override
     def np_inputs_spec(self):
-        list_attr_tys = [i.type for i in self.source_op.inputs]
+        list_attr_tys = [i.type for i in self.source_op.operands]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
     @override
     def np_outputs_spec(self) -> list[dict[str, tuple[int, ...] | str]]:
-        list_attr_tys = [i.type for i in self.source_op.outputs]
+        list_attr_tys = [i.type for i in self.source_op.results]
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
 
     @override
-    def reference_impl(self, *operands):
+    def reference_impl(self, *operands: Tuple[Any]):
         if self.source_op.name == "linalg.matmul":
             np.matmul(operands[0], operands[1], out=operands[2])
         else:

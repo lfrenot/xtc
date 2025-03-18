@@ -36,6 +36,7 @@ class MlirModule(RawMlirModule):
         self.local_functions = {}
         self.parse_and_add_function(str(xdsl_func))
         self.payload_name = str(xdsl_func.sym_name).replace('"', "")
+        self.named_sequence: None | transform.NamedSequenceOp = None
 
     def parse_and_add_function(
         self,
@@ -141,16 +142,14 @@ class MlirModule(RawMlirModule):
                 linalg.fill(scal, outs=[mem])
                 inputs.append(mem)
             # Execute and print the execution time
-            callrtclock1 = func.CallOp(ext_rtclock, [], loc=self.loc)
-            func.CallOp(measured_function, inputs, loc=self.loc)
-            callrtclock2 = func.CallOp(ext_rtclock, [], loc=self.loc)
-            time = arith.SubFOp(callrtclock2, callrtclock1, loc=self.loc)
-            func.CallOp(ext_printF64, [time], loc=self.loc)
+            callrtclock1 = func.CallOp(ext_rtclock, [])
+            func.CallOp(measured_function, inputs)
+            callrtclock2 = func.CallOp(ext_rtclock, [])
+            time = arith.SubFOp(callrtclock2, callrtclock1)
+            func.CallOp(ext_printF64, [time])
             # Dealloc
             for i in inputs:
                 memref.DeallocOp(i)
 
             func.ReturnOp([], loc=self.loc)
         return fmain
-
-
