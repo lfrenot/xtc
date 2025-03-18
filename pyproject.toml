@@ -24,10 +24,10 @@ zip-safe = false
 xtc = ["py.typed", "ctools/**", "templates/**"]
 
 [project.scripts]
-mlir-loop = "xtc.mlir_loop:main"
-backend = "xtc.backend:main"
-loop-display = "xtc.display_results:main"
-loop-explore = "xtc.explore:main"
+mlir-loop = "xtc.cli.mlir_loop:main"
+mlir-backend = "xtc.cli.mlir_backend:main"
+loop-display = "xtc.cli.display_results:main"
+loop-explore = "xtc.cli.explore:main"
 
 [build-system]
 requires = ["setuptools>=64", "wheel"]

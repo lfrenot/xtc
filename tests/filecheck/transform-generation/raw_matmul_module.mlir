@@ -1,4 +1,4 @@
-// RUN: backend %s --print-source-ir 2>&1 | filecheck %s
+// RUN: mlir-backend %s --print-source-ir 2>&1 | filecheck %s
 
 module {
 func.func @myfun(
