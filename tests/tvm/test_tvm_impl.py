@@ -70,7 +70,7 @@ def check_schedule(impl, sched_func):
     check_self_sched(impl, sch)
     schedule_str = sch.get_schedule_str()
     print(f"Schedule:\n{schedule_str}")
-    schedule = sch.implement()
+    schedule = sch.schedule()
     schedule_str = str(schedule)
     print(f"TVM schedule:\n{schedule_str}")
     for substr in expected:
