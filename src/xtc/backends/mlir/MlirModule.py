@@ -9,9 +9,9 @@ from mlir.ir import (
     FunctionType,
     F64Type,
     IntegerType,
-    UnitAttr,
 )
 import numpy as np
+
 
 class RawMlirModule:
     def __init__(self,source: str):
@@ -27,8 +27,6 @@ class RawMlirModule:
     def mlir_module(self):
         return self.module
 
-    def check_consistency(self):
-        pass
 
 class MlirModule(RawMlirModule):
     def __init__(self, xdsl_func: xdslfunc.FuncOp) -> None:
@@ -50,9 +48,6 @@ class MlirModule(RawMlirModule):
         self.local_functions[str(name)] = payload_func
         return payload_func
 
-    @override
-    def check_consistency(self):
-        pass
 
     def add_external_function(
         self,
