@@ -7,14 +7,10 @@ from xdsl.dialects.builtin import AnyMemRefType as xdslAnyMemRefType
 from xdsl.dialects.builtin import UnitAttr as xdslUnitAttr
 from xtc.utils.xdsl_aux import xdsl_operator_to_function
 
-import xtc.itf as itf
-
-from .MlirImplementer import MlirImplementer
-from .MlirCompiler import MlirCompiler
-from .MlirScheduler import MlirScheduler
+from .MlirBackend import MlirBackend
 
 
-class MlirNodeImplementer(MlirImplementer):
+class MlirNodeImplementer(MlirBackend):
 
     count = 0
 

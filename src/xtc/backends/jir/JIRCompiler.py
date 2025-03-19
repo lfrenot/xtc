@@ -70,18 +70,18 @@ COMMAND_INDEX = {
 class JIRCompiler(itf.comp.Compiler):
     def __init__(
             self,
-            implementer: "backend.JIRImplementer",
+            backend: "backend.JIRBackend",
             **kwargs: Any,
     ) -> None:
-        self._implementer = implementer
-        self.source_op = self._implementer.source_op
-        self.dims = self._implementer.dims
-        self.payload_name = self._implementer.payload_name
-        self._op_function_str = self._implementer._op_function_str
-        self._jir_function_str = self._implementer._jir_function_str
+        self._backend = backend
+        self.source_op = self._backend.source_op
+        self.dims = self._backend.dims
+        self.payload_name = self._backend.payload_name
+        self._op_function_str = self._backend._op_function_str
+        self._jir_function_str = self._backend._jir_function_str
         # TODO? deepcopy?
-        self._op_function_mlir = self._implementer._op_function_mlir
-        self._jir_function_op = self._implementer._jir_function_op
+        self._op_function_mlir = self._backend._op_function_mlir
+        self._jir_function_op = self._backend._jir_function_op
         self.save_temps = kwargs.get("save_temps", False)
         self.save_temps_dir = kwargs.get("save_temps_dir", "./save_temps_dir")
         self.bare_ptr = True
@@ -107,15 +107,15 @@ class JIRCompiler(itf.comp.Compiler):
 
     @property
     @override
-    def implementer(self) -> itf.impl.Implementer:
-        return self._implementer
+    def backend(self) -> itf.back.Backend:
+        return self._backend
 
     @override
     def compile(self, schedule: itf.schd.Schedule) -> itf.comp.Module:
         assert isinstance(schedule, JIRSchedule)
         assert self.dump_file is not None
         save_temp = self._save_temp
-        source_op = self._implementer.source_op
+        source_op = self._backend.source_op
         func_name = source_op.name
 
         dump_base = Path(self.dump_file).name

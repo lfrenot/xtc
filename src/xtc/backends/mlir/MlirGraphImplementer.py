@@ -5,14 +5,11 @@ from xdsl.dialects import func as xdslfunc
 from xdsl.dialects.builtin import AnyMemRefType
 from xdsl.ir import Block as xdslBlock
 
-import xtc.itf as itf
-
 from .MlirNodeImplementer import MlirNodeImplementer
-from .MlirImplementer import MlirImplementer
-from .MlirCompiler import MlirCompiler
+from .MlirBackend import MlirBackend
 
 
-class MlirGraphImplementer(MlirImplementer):
+class MlirGraphImplementer(MlirBackend):
 
     def __init__(
         self,

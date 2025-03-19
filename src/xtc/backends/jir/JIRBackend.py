@@ -20,10 +20,10 @@ from .JIRCompiler import JIRCompiler
 from .JIRGraph import JIROperator, JIRNode, JIRGraph
 
 __all__ = [
-    "JIRImplementer",
+    "JIRBackend",
 ]
 
-class JIRImplementer(itf.impl.Implementer):
+class JIRBackend(itf.back.Backend):
     def __init__(
             self,
             source_op: JIROperation,

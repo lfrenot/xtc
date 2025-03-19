@@ -3,14 +3,14 @@ from .schedule import Schedule
 import xtc.itf
 
 class Scheduler(ABC):
-    """An abstract implementation of the implementer scheduler.
+    """An abstract implementation of the backend scheduler.
 
-    A Scheduler is constructed from a given Implementer and is responsible for
+    A Scheduler is constructed from a given Backend and is responsible for
     applying primitive scheduling operations and transformations to the implementation.
     It generates a Schedule that captures these transformations, which can then be
     used by a Compiler to generate optimized executable code.
 
-    Schedulers are backend-specific and work with their associated Implementer
+    Schedulers are backend-specific and work with their associated Backend
     to provide optimization capabilities appropriate for the target platform
     and runtime.
     """
@@ -30,12 +30,12 @@ class Scheduler(ABC):
 
     @property
     @abstractmethod
-    def implementer(self) -> "xtc.itf.impl.Implementer":
-        """Returns the implementer associated with this scheduler.
+    def backend(self) -> "xtc.itf.back.Backend":
+        """Returns the backend associated with this scheduler.
 
         Returns:
-            Implementer: The backend-specific implementation this scheduler
-                        applies transformations to
+            Backend: The backend-specific implementation this scheduler
+                     applies transformations to
         """
         ...
 

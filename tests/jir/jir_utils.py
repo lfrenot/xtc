@@ -11,10 +11,10 @@ def requires_jir(*arg):
 
 
 def matmul_impl(i, j, k, dtype, name):
-    from xtc.backends.jir import JIRImplementer
+    from xtc.backends.jir import JIRBackend
     from xtc.backends.jir.JIROps import JIROperators, JIROperation
     op = JIROperation(JIROperators.matmul, (i, j, k, dtype), name=name)
-    impl = JIRImplementer(
+    impl = JIRBackend(
         source_op=op,
         dims=dict(i=i, j=j, k=k),
     )

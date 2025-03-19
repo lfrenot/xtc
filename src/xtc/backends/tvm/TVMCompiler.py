@@ -35,11 +35,11 @@ objdump_color_opts = [
 class TVMCompiler(itf.comp.Compiler):
     def __init__(
             self,
-            implementer: "backend.TVMImplementer",
+            backend: "backend.TVMBackend",
             **kwargs: Any,
     ) -> None:
-        self._implementer = implementer
-        self.payload_name = self._implementer.payload_name
+        self._backend = backend
+        self.payload_name = self._backend.payload_name
         self.save_temps = kwargs.get("save_temps", False)
         self.save_temps_dir = kwargs.get("save_temps_dir", "./save_temps_dir")
         self.bare_ptr = kwargs.get("bare_ptr", False)
@@ -56,8 +56,8 @@ class TVMCompiler(itf.comp.Compiler):
 
     @property
     @override
-    def implementer(self) -> itf.impl.Implementer:
-        return self._implementer
+    def backend(self) -> itf.back.Backend:
+        return self._backend
 
     def _save_temp(self, fname: str, content: str) -> None:
         if not self.save_temps:
@@ -71,7 +71,7 @@ class TVMCompiler(itf.comp.Compiler):
         assert isinstance(schedule, backend.TVMSchedule)
         assert self.dump_file is not None
         save_temp = self._save_temp
-        op = self._implementer.op
+        op = self._backend.op
         func_name = op.name
         packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
 

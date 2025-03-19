@@ -60,7 +60,7 @@ def extract_string_int_dict_from_attr(o: Operation, attr_name: str) -> dict[str,
 
 def schedule_operation(
     o: Operation,
-    implementer_name: str,
+    node_name: str,
     always_vectorize: bool,
     concluding_passes: list[str],
     no_alias: bool,
@@ -83,7 +83,7 @@ def schedule_operation(
         source_op = o,
         dims = dims,
         always_vectorize = always_vectorize,
-        payload_name = implementer_name,
+        payload_name = node_name,
         concluding_passes = concluding_passes,
         loop_stamps = loop_stamps,
         no_alias = no_alias,
@@ -223,11 +223,11 @@ def main():
     count = 0
     nodes_scheds = []
     for op in annotated_operations:
-        implementer_name = f"v{count}"
+        node_name = f"v{count}"
         count += 1
         sched = schedule_operation(
             op,
-            implementer_name,
+            node_name,
             always_vectorize=args.always_vectorize,
             concluding_passes=args.concluding_passes,
             no_alias=args.no_alias,
@@ -238,7 +238,7 @@ def main():
     impl_graph = MlirGraphImplementer(
         always_vectorize=args.always_vectorize,
         xdsl_func=myfunc,
-        nodes=[sched.implementer for sched in nodes_scheds],
+        nodes=[sched.backend for sched in nodes_scheds],
         concluding_passes = args.concluding_passes,
         no_alias = args.no_alias,
     )

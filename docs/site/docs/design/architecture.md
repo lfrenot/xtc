@@ -31,23 +31,23 @@ A Graph can be evaluated by interpretation or compiled.
 
 Compiler classes:
 
-- Implementer: an abstract implementation of specific Graph implementation
-- Scheduler: an abstract implementation of the implementer scheduler
+- Backend: an abstract implementation of a Graph for some evaluation/compilation backend
+- Scheduler: an abstract implementation of the backend scheduler
 - Schedule: an abstract representation of the result of transformations from a scheduler
-- Compiler: an abstract implementation of a compiler for a given implementer and schedule
+- Compiler: an abstract implementation of a compiler for a given backend and schedule
 - Module: an abstract representation of an executable module
 
-An Implementer is constructed from an input Graph.
+An Backend is constructed for an input Graph.
 
-A Scheduler is constructed from a given implementer.
+A Scheduler is constructed from a given Backend.
 
-A Compiler is constructed from a given Implementer.
+A Compiler is constructed from a given Backend.
 
-A Scheduler is used to apply primitive scheduling operations over the Implementer,
+A Scheduler is used to apply primitive scheduling operations over the Backend,
 a resulting Schedule can be constructed.
 
-A Compiler is used to compile the Implementer given a generated Schedule, a resulting
-Module can be constructed.
+A Compiler is used to compile the Backend implementation of the Graph given a generated Schedule,
+a resulting Module can be constructed.
 
 Evaluation Classes:
 
@@ -59,7 +59,7 @@ performannce metrics.
 
 ## Concrete implementations
 
-Example of concrete implementations for Implementer, Scheduler, Compiler provided by some different backends:
+Example of concrete implementations for Backend, Scheduler, Compiler provided by some different backends:
 
 - MLIR backend: using mlir linalg and transform dialects passed to mlir/llvm toolchain
 - TVM backend: using tvm tensor IR and schedule APIs passed to tvm backends 
@@ -67,5 +67,3 @@ Example of concrete implementations for Implementer, Scheduler, Compiler provide
 
 All backends above are able to generate Module in the form of shared objects for direct
 excution and evaluation or usage in a larger application.
-
-

@@ -20,7 +20,7 @@ It allow the integration of multiple backend and implements:
 Core components:
 
 - Abstract interfaces for tensors, graphs, nodes, and operators
-- Implementers for different backends
+- Implementations for different backends
 - Schedulers for transformation management
 - Compilers for code generation
 - Evaluators for performance measurement

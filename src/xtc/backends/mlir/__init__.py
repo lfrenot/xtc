@@ -1,5 +1,5 @@
-from .MlirImplementer import (
-    MlirImplementer,
+from .MlirBackend import (
+    MlirBackend,
 )
 
 from .MlirCompiler import (

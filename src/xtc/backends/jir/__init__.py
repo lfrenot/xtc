@@ -1,11 +1,5 @@
-from .JIRGraph import (
-    JIROperator,
-    JIRNode,
-    JIRGraph,
-)
-
-from .JIRImplementer import (
-    JIRImplementer,
+from .JIRBackend import (
+    JIRBackend,
 )
 
 from .JIRCompiler import (

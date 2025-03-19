@@ -225,12 +225,12 @@ class JIRSchedule(itf.schd.Schedule):
 
 
 class JIRScheduler(itf.schd.Scheduler):
-    def __init__(self, implementer: "backend.JIRImplementer", **kwargs: Any) -> None:
-        self._implementer = implementer
+    def __init__(self, backend: "backend.JIRBackend", **kwargs: Any) -> None:
+        self._backend = backend
         self._transformer = JIRSchedulerAdaptor(
-            self._implementer.dims,
-            self._implementer.source_op.dim_names,
-            self._implementer.source_op.axes_names,
+            self._backend.dims,
+            self._backend.source_op.dim_names,
+            self._backend.source_op.axes_names,
         )
 
     def _generate_transform(self) -> tuple[list[str], dict[str,int]]:
@@ -238,8 +238,8 @@ class JIRScheduler(itf.schd.Scheduler):
 
     @property
     @override
-    def implementer(self) -> itf.impl.Implementer:
-        return self._implementer
+    def backend(self) -> itf.back.Backend:
+        return self._backend
 
     @override
     def schedule(self) -> itf.schd.Schedule:

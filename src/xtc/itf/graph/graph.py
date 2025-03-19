@@ -10,7 +10,7 @@ class Graph(ABC):
     outputs and graph outputs Tensor dimensions and types can be inferred.
 
     A Graph can be evaluated by interpretation or compiled through various backends
-    (mlir, tvm, jir) using corresponding Implementer, Scheduler, and Compiler classes.
+    (mlir, tvm, jir) using corresponding Backend, Scheduler, and Compiler classes.
 
     Nodes in the graph are keyed by their name which is unique within the graph.
     """

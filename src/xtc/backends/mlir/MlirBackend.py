@@ -13,7 +13,7 @@ from .MlirCompiler import MlirCompiler
 from .MlirScheduler import MlirScheduler
 
 
-class MlirImplementer(itf.impl.Implementer):
+class MlirBackend(itf.back.Backend):
     def __init__(
             self,
             xdsl_func: xdslfunc.FuncOp,

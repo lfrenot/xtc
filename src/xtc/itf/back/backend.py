@@ -6,10 +6,10 @@ from ..schd.scheduler import Scheduler
 from ..comp.compiler import Compiler, Module
 
 
-class Implementer(ABC):
+class Backend(ABC):
     """An abstract implementation of specific Graph implementation.
 
-    An Implementer is constructed from an input Graph and provides backend-specific
+    A Backend is constructed from an input Graph and provides backend-specific
     implementations of the graph operations. It serves as a bridge between the abstract
     graph representation and concrete backend implementations (e.g., MLIR, TVM, JIR).
 

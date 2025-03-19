@@ -14,9 +14,9 @@ ScheduleImpl: TypeAlias = str
 
 
 class TVMScheduler(itf.schd.Scheduler):
-    def __init__(self, impl: "backend.TVMImplementer") -> None:
-        self.dims: dict[str, int] = {**impl.dims}
-        self.parallel_dims: list[str] = [*impl.parallel_dims]
+    def __init__(self, backend: "backend.TVMBackend") -> None:
+        self.dims: dict[str, int] = {**backend.dims}
+        self.parallel_dims: list[str] = [*backend.parallel_dims]
         self.tiles: dict[str, dict[str, int]]  = {k:{k:v} for k,v in self.dims.items()}
         self.permutation: list[str] = []
         self.vectorization: list[str] = []
@@ -24,12 +24,12 @@ class TVMScheduler(itf.schd.Scheduler):
         self.unrolling: dict[str, int] = {}
         self.write_caches: list[str] = []
         self._update_loops()
-        self._implementer = impl
+        self._backend = backend
 
     @property
     @override
-    def implementer(self) -> itf.impl.Implementer:
-        return self._implementer
+    def backend(self) -> itf.back.Backend:
+        return self._backend
 
     @override
     def schedule(self) -> itf.schd.Schedule:

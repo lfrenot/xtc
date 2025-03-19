@@ -201,9 +201,9 @@ def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
     }
 
 def tvm_matmul_impl(i, j, k, ftype, graph):
-    from xtc.backends.tvm import TVMImplementer
+    from xtc.backends.tvm import TVMBackend
     node = graph["nodes"]["matmul"]
-    impl = TVMImplementer(
+    impl = TVMBackend(
         source_op=node["op"],
         dims=node["dims"],
         parallel_dims=node["parallel_dims"],
@@ -229,18 +229,18 @@ def jir_matmul_graph(i, j, k, ftype, name="matmul"):
     }
 
 def jir_matmul_impl(i, j, k, ftype, graph):
-    from xtc.backends.jir import JIRImplementer
+    from xtc.backends.jir import JIRBackend
     node = graph["nodes"]["matmul"]
-    impl = JIRImplementer(
+    impl = JIRBackend(
         source_op=node["op"],
         dims=node["dims"],
     )
     return impl, None, None, None, node["op"], "jir"
 
 def tvm_relu_graph(i, ftype, threshold=0, name=None):
-    import xtc.TVMImplementer as TVMImplementer
-    relu = TVMImplementer.Operation(
-        TVMImplementer.Operators.relu,
+    from xtc.backends.tvm.TVMOps import TVMOperation, TVMOperators
+    relu = TVMOperation(
+        TVMOperators.relu,
         (i, DTYPES_MAP[ftype]),
         name=name,
     )
@@ -255,9 +255,9 @@ def tvm_relu_graph(i, ftype, threshold=0, name=None):
     }
 
 def tvm_relu_impl(i, ftype, graph):
-    import xtc.TVMImplementer as TVMImplementer
+    from xtc.backends.tvm import TVMBackend
     node = graph["nodes"]["relu"]
-    impl = TVMImplementer.Implementer(
+    impl = TVMBackend(
         source_op=node["op"],
         dims=node["dims"],
         parallel_dims=node["parallel_dims"],

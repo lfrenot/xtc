@@ -10,7 +10,7 @@ from .TVMScheduler import TVMScheduler
 from .TVMCompiler import TVMCompiler
 
 __all__ = [
-    "TVMImplementer",
+    "TVMBackend",
 ]
 
 class TVMOperator(itf.operator.Operator):
@@ -103,7 +103,7 @@ class TVMGraph(itf.graph.Graph):
     def outputs(self) -> list[str]:
         return self._outputs
 
-class TVMImplementer(itf.impl.Implementer):
+class TVMBackend(itf.back.Backend):
     def __init__(
             self,
             source_op: TVMOperation,

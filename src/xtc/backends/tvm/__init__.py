@@ -1,11 +1,5 @@
-from .TVMImplementer import (
-    TVMImplementer,
-)
-
-from .TVMOps import (
-    TVMOperators,
-    TVMOperation,
-    TVMOperator,
+from .TVMBackend import (
+    TVMBackend,
 )
 
 from .TVMCompiler import (
@@ -16,4 +10,3 @@ from .TVMScheduler import (
     TVMScheduler,
     TVMSchedule,
 )
-

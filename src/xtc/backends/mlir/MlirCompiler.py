@@ -47,16 +47,16 @@ from .MlirCompilerPasses import (
 class MlirCompiler(itf.comp.Compiler):
     def __init__(
             self,
-            implementer: "backend.MlirImplementer",
+            backend: "backend.MlirBackend",
             **kwargs: Any,
     ):
-        self._implementer = implementer
+        self._backend = backend
         self._compiler_kwargs = kwargs
 
     @property
     @override
-    def implementer(self) -> itf.impl.Implementer:
-        return self._implementer
+    def backend(self) -> itf.back.Backend:
+        return self._backend
 
     @override
     def compile(
@@ -69,27 +69,27 @@ class MlirCompiler(itf.comp.Compiler):
         temp_dir = None
         if dump_file is None:
             temp_dir = tempfile.mkdtemp()
-            dump_file = f"{temp_dir}/{self._implementer.payload_name}"
+            dump_file = f"{temp_dir}/{self._backend.payload_name}"
             self._compiler_kwargs["dump_file"] = dump_file
         program = self.generate_program()
         compiler = MlirProgramCompiler(
             mlir_program=program,
             mlir_schedule=cast(MlirSchedule, schedule),
-            concluding_passes=self._implementer.concluding_passes,
-            always_vectorize=self._implementer.always_vectorize,
+            concluding_passes=self._backend.concluding_passes,
+            always_vectorize=self._backend.always_vectorize,
             **self._compiler_kwargs,
         )
         assert compiler.dump_file is not None
         compiler.compile()
         executable = HostModule(
             Path(compiler.dump_file).name,
-            self._implementer.payload_name,
+            self._backend.payload_name,
             f"{compiler.dump_file}.so",
             "shlib",
             bare_ptr=compiler.bare_ptr,
-            np_inputs_spec=self._implementer.np_inputs_spec,
-            np_outputs_spec=self._implementer.np_outputs_spec,
-            reference_impl=self._implementer.reference_impl,
+            np_inputs_spec=self._backend.np_inputs_spec,
+            np_outputs_spec=self._backend.np_outputs_spec,
+            reference_impl=self._backend.reference_impl,
         )
         if temp_dir is not None:
             shutil.rmtree(temp_dir)
@@ -97,8 +97,8 @@ class MlirCompiler(itf.comp.Compiler):
 
     def generate_program(self) -> RawMlirProgram:
         # xdsl_func input must be read only, clone it first
-        xdsl_func = self._implementer.xdsl_func.clone()
-        if self._implementer.no_alias:
+        xdsl_func = self._backend.xdsl_func.clone()
+        if self._backend.no_alias:
             brand_inputs_with_noalias(xdsl_func)
         return MlirProgram(xdsl_func)
 
