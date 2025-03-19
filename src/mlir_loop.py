@@ -134,6 +134,18 @@ def main():
         help="The prefix for LLVM/MLIR tools, or autodetected.",
     )
     parser.add_argument(
+        "--arch",
+        type=str,
+        default="native",
+        help="The target architecture.",
+    )
+    parser.add_argument(
+        "--microarch",
+        type=str,
+        default="native",
+        help="The target microarchitecture.",
+    )
+    parser.add_argument(
         "--concluding-passes",
         metavar = "N",
         type=str,
@@ -184,7 +196,6 @@ def main():
     parser.add_argument(
         "--color",
         action="store_true",
-        default = True,
         help="Allow colors."
     )
     parser.add_argument(
@@ -238,7 +249,9 @@ def main():
     compiler = MlirCompiler(
         mlir_module=impl_module,
         mlir_install_dir=args.llvm_dir,
-        to_disassemble = impl_module.payload_name
+        to_disassemble = impl_module.payload_name,
+        arch = args.arch,
+        microarch = args.microarch,
     )
     if args.evaluate:
         e = compiler.evaluate(

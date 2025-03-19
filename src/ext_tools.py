@@ -35,12 +35,10 @@ mlirtranslate_opts = ['--mlir-to-llvmir']
 llc_opts = [
     '-O3',
     '-filetype=obj',
-    '--mcpu=native'
 ]
 
 opt_opts = [
     '-O3',
-    '--march=native'
 ]
 
 cc_opts = [
@@ -77,6 +75,8 @@ mlirrunner_opts = [
 ]
 
 objdump_bin = 'objdump'
+
+objdump_arm_bin = 'aarch64-linux-gnu-objdump'
 
 cc_bin = "cc"
 
