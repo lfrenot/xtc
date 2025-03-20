@@ -84,7 +84,6 @@ objdump_opts = [
     '-dr',
     '--no-addresses',
     '--no-show-raw-insn',
-    '--visualize-jumps'
 ]
 
 objdump_color_opts = [
