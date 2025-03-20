@@ -132,7 +132,7 @@ class MlirProgramCompiler():
         self.concluding_passes = kwargs.get("concluding_passes", [])
         self.always_vectorize = kwargs.get("always_vectorize", False)
         self.arch = kwargs.get("arch", "native")
-        self.microarch = kwargs.get("microarch", "native")
+        self.cpu = kwargs.get("cpu", "native")
 
     @property
     def cmd_cc(self):
@@ -141,15 +141,15 @@ class MlirProgramCompiler():
     @property
     def cmd_opt(self):
         opt = [f"{self.mlir_install_dir}/bin/opt"]
-        return opt + opt_opts + [f"-march={self.arch}", f"--mcpu={self.microarch}"]
+        return opt + opt_opts + [f"-march={self.arch}", f"--mcpu={self.cpu}"]
 
     @property
     def cmd_llc(self):
         llc = [f"{self.mlir_install_dir}/bin/llc"]
         if self.arch == "native":
-            llc_arch = [f"--mcpu={self.microarch}"]
+            llc_arch = [f"--mcpu={self.cpu}"]
         else:
-            llc_arch = [f"-march={self.arch}",f"--mcpu={self.microarch}"]
+            llc_arch = [f"-march={self.arch}",f"--mcpu={self.cpu}"]
         return llc + llc_opts + llc_arch
 
     @property

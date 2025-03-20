@@ -1,4 +1,4 @@
-// RUN: mlir-loop %s --no-alias --always-vectorize --arch x86-64 --microarch skylake --print-assembly --hide-jumps 2>&1 | filecheck %s
+// RUN: mlir-loop %s --no-alias --always-vectorize --arch x86-64 --cpu skylake --print-assembly --hide-jumps 2>&1 | filecheck %s
 
 func.func @myfun(
   %A: memref<256x512xf32>,

@@ -102,7 +102,7 @@ class JIRCompiler(itf.comp.Compiler):
             get_host_target_triple(self._jir_llvm_config)
         )
         self._target_arch = kwargs.get("target_arch", "native")
-        self._target_microarch = kwargs.get("target_microarch", "native")
+        self._target_cpu = kwargs.get("target_cpu", "native")
         self.jir_dims = {k: v for k, v in zip(self.source_op.args_names[:len(self.dims)], self.source_op.args[:len(self.dims)])}
         self._vectors_size = kwargs.get("vector_size", 16)
 
@@ -216,16 +216,16 @@ class JIRCompiler(itf.comp.Compiler):
     @property
     def _cmd_opt(self):
         opt = [f"{self.mlir_install_dir}/bin/opt"]
-        arch_opts = [f"-march={self._target_arch}", f"--mcpu={self._target_microarch}"]
+        arch_opts = [f"-march={self._target_arch}", f"--mcpu={self._target_cpu}"]
         return opt + opt_opts + arch_opts
 
     @property
     def _cmd_llc(self):
         llc = [f"{self.mlir_install_dir}/bin/llc"]
         if self._target_arch == "native":
-            arch_opts = [f"--mcpu={self._target_microarch}"]
+            arch_opts = [f"--mcpu={self._target_cpu}"]
         else:
-            arch_opts = [f"-march={self._target_arch}",f"--mcpu={self._target_microarch}"]
+            arch_opts = [f"-march={self._target_arch}",f"--mcpu={self._target_cpu}"]
         return llc + llc_opts + arch_opts
 
     def _generate_module_for(self, ctx: JIRFunctionContext) -> ModuleOp:
