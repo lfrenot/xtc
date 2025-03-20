@@ -8,7 +8,6 @@ from xdsl.dialects import (
 )
 from xdsl.ir import (
     Operation,
-    Data,
 )
 
 from xtc.utils.xdsl_aux import parse_xdsl_module
@@ -144,10 +143,10 @@ def main():
         help="The target architecture.",
     )
     parser.add_argument(
-        "--microarch",
+        "--cpu",
         type=str,
         default="native",
-        help="The target microarchitecture.",
+        help="The target CPU.",
     )
     parser.add_argument(
         "--concluding-passes",
@@ -201,6 +200,11 @@ def main():
         "--color",
         action="store_true",
         help="Allow colors."
+    )
+    parser.add_argument(
+        "--hide-jumps",
+        action="store_true",
+        help="Hide assembly visualization of control flow."
     )
     parser.add_argument(
         "--debug",
@@ -263,11 +267,12 @@ def main():
         print_transformed_ir=args.print_transformed_ir,
         print_lowered_ir=args.print_lowered_ir,
         print_assembly=args.print_assembly,
+        visualize_jumps= not args.hide_jumps,
         color=args.color,
         debug=args.debug,
         dump_file=dump_file,
         arch = args.arch,
-        microarch = args.microarch,
+        cpu = args.cpu,
     )
     if args.evaluate:
         compiler_args.update(dict(shared_lib=True))
