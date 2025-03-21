@@ -94,9 +94,8 @@ class MlirCompiler(itf.comp.Compiler):
         return executable
 
     def generate_program(self) -> RawMlirProgram:
-        # xdsl_func input must be read only, clone it first
-        xdsl_func = self._backend.xdsl_func.clone()
-        return MlirProgram(xdsl_func, self._backend.no_alias)
+        # xdsl_func input must be read only
+        return MlirProgram(self._backend.xdsl_func, self._backend.no_alias)
 
 
 class MlirProgramCompiler():
