@@ -18,10 +18,10 @@ class MlirScheduler(itf.schd.Scheduler):
             backend: "backend.MlirBackend",
             nodes_schedulers: list["MlirScheduler"]|None = None,
     ) -> None:
-        from .MlirGraphImplementer import MlirGraphImplementer
-        from .MlirNodeImplementer import MlirNodeImplementer
+        from .MlirGraphBackend import MlirGraphBackend
+        from .MlirNodeBackend import MlirNodeBackend
         self._backend = backend
-        if isinstance(backend, MlirGraphImplementer):
+        if isinstance(backend, MlirGraphBackend):
             if nodes_schedulers is None:
                 self._nodes_schedulers = [
                     MlirScheduler(node_impl)
@@ -29,7 +29,7 @@ class MlirScheduler(itf.schd.Scheduler):
                 ]
             else:
                 self._nodes_schedulers = nodes_schedulers
-            # TODO: by default, when a graph, we assume to chedule the
+            # TODO: by default, when a graph, we assume to schedule the
             # output node which is assumed to be the last
             self._scheduler: MlirNodeScheduler|None = (
                 self._nodes_schedulers[-1]._scheduler
@@ -37,7 +37,7 @@ class MlirScheduler(itf.schd.Scheduler):
                 else None
             )
         else:
-            assert isinstance(backend, MlirNodeImplementer)
+            assert isinstance(backend, MlirNodeBackend)
             assert nodes_schedulers is None
             self._nodes_schedulers = [self]
             self._scheduler = MlirNodeScheduler(
@@ -54,9 +54,9 @@ class MlirScheduler(itf.schd.Scheduler):
 
     @override
     def schedule(self) -> itf.schd.Schedule:
-        from .MlirGraphImplementer import MlirGraphImplementer
-        from .MlirNodeImplementer import MlirNodeImplementer
-        if isinstance(self._backend, MlirGraphImplementer):
+        from .MlirGraphBackend import MlirGraphBackend
+        from .MlirNodeBackend import MlirNodeBackend
+        if isinstance(self._backend, MlirGraphBackend):
             assert not any([
                 scheduler._scheduler is None
                 for scheduler in self._nodes_schedulers
@@ -66,7 +66,7 @@ class MlirScheduler(itf.schd.Scheduler):
                 for scheduler in self._nodes_schedulers
             ]
         else:
-            assert isinstance(self._backend, MlirNodeImplementer)
+            assert isinstance(self._backend, MlirNodeBackend)
             assert self._scheduler is not None
             nodes_schedules = [self._scheduler.mlir_node_schedule()]
         return MlirSchedule(scheduler=self, nodes_schedules=nodes_schedules)
