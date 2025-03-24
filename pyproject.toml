@@ -1,6 +1,6 @@
 [project]
 name = "xtc"
-version = "0.1.0"
+version = "0.2.dev1"
 dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0']
 requires-python = ">=3.10"
 
