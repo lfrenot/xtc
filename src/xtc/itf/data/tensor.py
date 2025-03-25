@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TypeAlias
 import numpy.typing
 
+
+ShapeType: TypeAlias = tuple[int|str|None,...]|None
+DataType: TypeAlias = str|None
 
 class TensorType(ABC):
     """An abstract representation of a tensor's type information.
@@ -12,8 +15,9 @@ class TensorType(ABC):
     size along each dimension, and the underlying data type.
     """
 
+    @property
     @abstractmethod
-    def shape(self) -> tuple[int]:
+    def shape(self) -> ShapeType:
         """Returns the tensor's shape as a tuple of dimension sizes.
 
         Returns:
@@ -21,8 +25,9 @@ class TensorType(ABC):
         """
         ...
 
+    @property
     @abstractmethod
-    def dtype(self) -> str:
+    def dtype(self) -> DataType:
         """Returns the tensor's data type.
 
         Returns:
@@ -30,8 +35,9 @@ class TensorType(ABC):
         """
         ...
 
+    @property
     @abstractmethod
-    def ndims(self) -> int:
+    def ndim(self) -> int:
         """Returns the number of dimensions in the tensor.
 
         Returns:
@@ -50,6 +56,7 @@ class Tensor(ABC):
     the compilation process.
     """
 
+    @property
     @abstractmethod
     def type(self) -> TensorType:
         """Returns the tensor's type information.
@@ -59,6 +66,7 @@ class Tensor(ABC):
         """
         ...
 
+    @property
     @abstractmethod
     def data(self) -> Any:
         """Returns the tensor's linearized data.
