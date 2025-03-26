@@ -1,4 +1,5 @@
 from cpuinfo import get_cpu_info
+from typing import Dict, Any
 
 def cpu_info() -> Dict[str,Any]:
     """
