@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/env python3
 
 import sys
 import subprocess
@@ -10,13 +10,19 @@ def process_file(file_path: str, in_place: bool, regexp: bool):
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
-    if not lines[0].startswith('// RUN:'):
-        print(f"Error: The first line of the file does not start with '// RUN:'")
+    # Handle any comment kind, generally '//' or '#'
+    re_prefix = r"^([^ ])+ +RUN:"
+    m = re.match(re_prefix, lines[0])
+    if not m:
+        print(f"Error: The first line of the file does not start with '... RUN:'")
         return
+
+    # prefix contains the comment prefix
+    prefix = m.group(1)
 
     # Extract the command from the first line
     first_line = lines[0].strip()
-    command = re.sub(r'// RUN:\s*', '', first_line)
+    command = re.sub(re_prefix, '', first_line).strip()
     command = command.split('|')[0].strip()
     command = command.replace('%s', file_path)
 
@@ -30,13 +36,17 @@ def process_file(file_path: str, in_place: bool, regexp: bool):
 
     # Process the output
     output_lines = output.splitlines()
-    processed_output = '// CHECK:' + INDENT*' ' + output_lines[0] + '\n'
+    processed_output = f'{prefix} CHECK:' + INDENT*' ' + output_lines[0] + '\n'
     for line in output_lines[1:]:
-        processed_output += '// CHECK-NEXT:' + (INDENT - 5)*' ' + line + '\n'
+        processed_output += f'{prefix} CHECK-NEXT:' + (INDENT - 5)*' ' + line + '\n'
 
     if in_place:
-        # Remove lines starting with '// CHECK:' or '// CHECK-NEXT:'
-        new_lines = [line for line in lines if not line.startswith('// CHECK:') and not line.startswith('// CHECK-NEXT:')]
+        # Remove lines starting with '... CHECK:' or '... CHECK-NEXT:'
+        new_lines = [
+            line for line in lines
+            if (not line.startswith(f'{prefix} CHECK:') and
+                not line.startswith(f'{prefix} CHECK-NEXT:'))
+        ]
         new_lines.append(processed_output)
 
         with open(file_path, 'w') as file:
