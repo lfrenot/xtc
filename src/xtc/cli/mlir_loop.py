@@ -197,6 +197,12 @@ def main():
         help="Evaluate the generated code."
     )
     parser.add_argument(
+        "--init-zero",
+        action="store_true",
+        default = False,
+        help="Init the output with zeros before measurement."
+    )
+    parser.add_argument(
         "--color",
         action="store_true",
         help="Allow colors."
@@ -281,7 +287,10 @@ def main():
     module = compiler.compile(impl_schedule)
 
     if args.evaluate:
-        evaluator = module.get_evaluator()
+        evaluator_args = dict(
+            init_zero=args.init_zero,
+        )
+        evaluator = module.get_evaluator(**evaluator_args)
         res, code, err = evaluator.evaluate()
         assert code == 0, f"evaluation error: {err}"
         print(min(res))
