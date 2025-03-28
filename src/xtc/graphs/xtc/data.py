@@ -72,8 +72,13 @@ class XTCTensorType(TensorType):
 
     @override
     def __repr__(self) -> str:
-        return f"TensorType(shape={self._shape}, dtype={self._dtype}"
+        return f"TensorType(shape={self._shape}, dtype={self._dtype})"
 
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, XTCTensorType):
+            return NotImplemented
+        return self.dtype == other.dtype and self.shape == other.shape
 
 class XTCTensor(Tensor):
     def __init__(self, data: Any|None = None, type: XTCTensorType|None = None) -> None:
@@ -100,4 +105,12 @@ class XTCTensor(Tensor):
 
     @override
     def __repr__(self) -> str:
-        return f"Tensor(type={self._type}, data={self._data})"
+        if self._data is None:
+            return f"Tensor(type={self._type}, data=None)"
+        else:
+            data = self._data.reshape((-1,))
+            if len(data) > 8:
+                data_str = f"{' '.join([str(d) for d in data[:4]])}...{' '.join([str(d) for d in data[-4:]])}"
+            else:
+                data_str = f"{' '.join([str(d) for d in data])}"
+            return f"Tensor(type={self._type}, data={data_str})"

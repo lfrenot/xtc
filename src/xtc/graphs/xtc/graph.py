@@ -50,6 +50,14 @@ class XTCGraph(Graph):
     def add_nodes(self, nodes: NodesType) -> None:
         self._nodes.extend(nodes)
 
+    @property
+    def inputs_nodes(self) -> list["XTCNode"]:
+        return self._inputs
+
+    @property
+    def outputs_nodes(self) -> list["XTCNode"]:
+        return self._outputs
+
     def set_inputs(self, inputs: InputsType) -> None:
         self._inputs = inputs
 

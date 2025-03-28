@@ -13,7 +13,7 @@ class graph_builder():
         XTCGraphContext.push(**self._graph_kwargs)
         return self
 
-    def __exit__(self, type, value, traceback) -> None: # type: ignore
+    def __exit__(self, *_: Any) -> None:
         scope = XTCGraphContext.pop()
         self._graph = scope.graph
 
