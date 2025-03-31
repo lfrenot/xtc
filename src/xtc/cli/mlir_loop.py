@@ -289,6 +289,7 @@ def main():
     if args.evaluate:
         evaluator_args = dict(
             init_zero=args.init_zero,
+            min_repeat_ms=100,
         )
         evaluator = module.get_evaluator(**evaluator_args)
         res, code, err = evaluator.evaluate()
