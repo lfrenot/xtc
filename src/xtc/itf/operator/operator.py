@@ -21,7 +21,7 @@ class Operator(ABC):
         ...
 
     @abstractmethod
-    def applyType(self, inputs: list[TensorType]) -> list[TensorType]:
+    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
         """Infers output tensor types from input tensor types.
 
         Args:
@@ -33,8 +33,8 @@ class Operator(ABC):
         ...
 
     @abstractmethod
-    def apply(self, inputs: list[Tensor]) -> list[Tensor]:
-        """Applies the operation to input tensors to produce output tensors.
+    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
+        """Evaluate the operator with input tensors to produce output tensors.
 
         Args:
             inputs: List of input tensors

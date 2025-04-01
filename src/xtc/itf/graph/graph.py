@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from .node import Node
-
+from ..data import TensorType, Tensor
 
 class Graph(ABC):
     """An abstract representation of a dataflow graph over Tensor types.
 
-    A Graph is a directed acyclic graph (DAG) over Node objects with input Tensors 
-    and output Tensors. From given input Tensor dimensions and type, all node inputs, 
+    A Graph is a directed acyclic graph (DAG) over Node objects with input Tensors
+    and output Tensors. From given input Tensor dimensions and type, all node inputs,
     outputs and graph outputs Tensor dimensions and types can be inferred.
 
     A Graph can be evaluated by interpretation or compiled through various backends
@@ -52,5 +52,29 @@ class Graph(ABC):
 
         Returns:
             List of output tensor names
+        """
+        ...
+
+    @abstractmethod
+    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
+        """Infers output tensor types from input tensor types.
+
+        Args:
+            inputs: List of input tensor types
+
+        Returns:
+            List of inferred output tensor types
+        """
+        ...
+
+    @abstractmethod
+    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
+        """Evaluate the graph with input tensors to produce output tensors.
+
+        Args:
+            inputs: List of input tensors
+
+        Returns:
+            List of output tensors
         """
         ...
