@@ -11,20 +11,22 @@ func.func @myfun(
         affine_map<(n,h,w,f,r,s,c) -> (r,s,c,f)>,
         affine_map<(n,h,w,f,r,s,c) -> (n,h,w,f)>],
       iterator_types = ["parallel", "parallel", "parallel", "parallel",
-          "reduction", "reduction", "reduction"],
-      loop.dims = ["n","h","w","f","c","r","s"],
-      loop.tiles = {
-        "f" = {"f1" = 64},
-        "h" = {"h1" = 14, "h2" = 2},
-        "w" = {"w1" = 2},
-        "c" = {"c1" = 4}
-      },
-      loop.interchange = ["r", "s", "h", "w", "h1", "f", "c", "c1", "w1", "h2", "f1"],
-      loop.vectorize = ["f1"],
-      loop.unroll = {f1 = 4, h2 = 2, w1 = 2, c1 = 4}
-    }
-    ins(%I, %K : memref<1x30x30x64xf32>, memref<3x3x64x128xf32>)
-    outs(%O : memref<1x28x28x128xf32>)
+          "reduction", "reduction", "reduction"]
+  }
+  ins (%I, %K : memref<1x30x30x64xf32>, memref<3x3x64x128xf32>)
+  outs(%O : memref<1x28x28x128xf32>)
+  attrs = {
+    loop.dims = ["n","h","w","f","c","r","s"],
+    loop.tiles = {
+      "f" = {"f1" = 64},
+      "h" = {"h1" = 14, "h2" = 2},
+      "w" = {"w1" = 2},
+      "c" = {"c1" = 4}
+    },
+    loop.interchange = ["r", "s", "h", "w", "h1", "f", "c", "c1", "w1", "h2", "f1"],
+    loop.vectorize = ["f1"],
+    loop.unroll = {f1 = 4, h2 = 2, w1 = 2, c1 = 4}
+  }
   {
     ^bb0(%0: f32, %1: f32, %2: f32) :
       %3 = arith.mulf %0, %1 : f32
