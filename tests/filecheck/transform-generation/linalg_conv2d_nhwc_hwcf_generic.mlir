@@ -5,17 +5,6 @@ func.func @myfun(
   %K: memref<3x3x64x128xf32>,
   %O: memref<1x28x28x128xf32>
 ) {
-  %cst = arith.constant 0.000 : f32
-  linalg.fill
-    {
-      loop.dims = ["n","h","w","f"],
-      loop.tiles = {"f" = {"f1" = 8}},
-      loop.interchange = ["n","h","w","f","f1"],
-      loop.vectorize = ["f1"],
-      loop.parallelize = ["h"]
-    }
-    ins(%cst : f32)
-    outs(%O : memref<1x28x28x128xf32>)
   linalg.generic {
       indexing_maps = [
         affine_map<(n,h,w,f,r,s,c) -> (n,h+r,w+s,c)>,
