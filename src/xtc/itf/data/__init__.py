@@ -1,1 +1,9 @@
-from .tensor import TensorType, Tensor, DataType, ShapeType
+from .tensor import (
+    TensorType,
+    ConstantTensorType,
+    DataType,
+    ShapeType,
+    ConstantDataType,
+    ConstantShapeType,
+    Tensor,
+)

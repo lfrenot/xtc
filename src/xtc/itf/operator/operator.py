@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from ..data.tensor import Tensor, TensorType
 
 
@@ -21,7 +22,7 @@ class Operator(ABC):
         ...
 
     @abstractmethod
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
+    def forward_types(self, inputs_types: Sequence[TensorType]) -> Sequence[TensorType]:
         """Infers output tensor types from input tensor types.
 
         Args:
@@ -33,7 +34,7 @@ class Operator(ABC):
         ...
 
     @abstractmethod
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[Tensor]:
         """Evaluate the operator with input tensors to produce output tensors.
 
         Args:
