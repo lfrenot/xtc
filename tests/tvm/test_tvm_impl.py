@@ -85,23 +85,27 @@ def check_evaluate(impl, schedule):
 @requires_tvm
 def test_sched_nop():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_nop)
     check_evaluate(impl, schedule)
 
 @requires_tvm
 def test_sched_tile2():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile2)
     check_evaluate(impl, schedule)
 
 @requires_tvm
 def test_sched_tile2p():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile2p)
     check_evaluate(impl, schedule)
 
 @requires_tvm
 def test_sched_tile3wc():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile3wc)
     check_evaluate(impl, schedule)

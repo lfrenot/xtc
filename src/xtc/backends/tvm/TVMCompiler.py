@@ -72,7 +72,7 @@ class TVMCompiler(itf.comp.Compiler):
         assert self.dump_file is not None
         save_temp = self._save_temp
         op = self._backend.op
-        func_name = op.name
+        func_name = self.payload_name
         packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
 
         dump_base = Path(self.dump_file).name
@@ -136,9 +136,7 @@ class TVMCompiler(itf.comp.Compiler):
             f"{lib_path}.so",
             "shlib",
             bare_ptr=self.bare_ptr,
-            np_inputs_spec=op.np_inputs_spec,
-            np_outputs_spec=op.np_outputs_spec,
-            reference_impl=op.reference_impl,
+            graph=self._backend._graph,
         )
 
 

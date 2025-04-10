@@ -74,7 +74,7 @@ class JIRCompiler(itf.comp.Compiler):
             **kwargs: Any,
     ) -> None:
         self._backend = backend
-        self.source_op = self._backend.source_op
+        self.source_op = self._backend.op
         self.dims = self._backend.dims
         self.payload_name = self._backend.payload_name
         self._op_function_str = self._backend._op_function_str
@@ -116,8 +116,8 @@ class JIRCompiler(itf.comp.Compiler):
         assert isinstance(schedule, JIRSchedule)
         assert self.dump_file is not None
         save_temp = self._save_temp
-        source_op = self._backend.source_op
-        func_name = source_op.name
+        source_op = self._backend.op
+        func_name = self._backend.payload_name
 
         dump_base = Path(self.dump_file).name
         lib_path = self.dump_file
@@ -166,9 +166,7 @@ class JIRCompiler(itf.comp.Compiler):
             f"{lib_path}.so",
             "shlib",
             bare_ptr=self.bare_ptr,
-            np_inputs_spec=source_op.np_inputs_spec,
-            np_outputs_spec=source_op.np_outputs_spec,
-            reference_impl=source_op.reference_impl,
+            graph=self._backend._graph,
         )
 
     def _compile_jir_module(

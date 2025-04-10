@@ -3,6 +3,8 @@ from typing_extensions import override
 import numpy as np
 from typing import Any, Type
 
+from xtc.itf.graph import Operation
+
 __all__ = [
     "TVMOperation",
     "TVMOperator",
@@ -135,12 +137,25 @@ class TVMOperation():
         ]
         return outputs_spec
 
-    def reference_impl(self, *args: Any) -> None:
-        self.operator.reference_impl(*args)
+    @classmethod
+    def from_operation(cls, xtc_op: Operation, name: str|None) -> "TVMOperation":
+        dims = xtc_op.dims.values()
+        dtype = xtc_op.inputs_types[0].dtype # TODO: infer dtype form first input
+        args = tuple([*dims, dtype])
+        attrs = xtc_op.attrs
+        return TVMOperation(
+            TVMOperators.from_name(xtc_op.name),
+            args,
+            dict(attrs),
+            name=name,
+        )
 
 
 class TVMOperator(ABC):
     DEFAULT_NAME = "undef"
+    AXES = ""
+    KINDS = ""
+
     def __init__(self, args: tuple[Any,...], attrs: dict[str, Any], name: str|None = None) -> None:
         self.args = args
         self.attrs = {**attrs}
@@ -150,6 +165,12 @@ class TVMOperator(ABC):
     def generate_op(self):
         ...
     @abstractmethod
+    def dims(self, kind: str = "") -> tuple[str,...]:
+        ...
+    @abstractmethod
+    def dims_sizes(self) -> dict[str, int]:
+        ...
+    @abstractmethod
     def inputs_dims(self) -> tuple[tuple[int,...],...]:
         ...
     @abstractmethod
@@ -161,54 +182,74 @@ class TVMOperator(ABC):
     @abstractmethod
     def outputs_types(self) -> tuple[str,...]:
         ...
-    @abstractmethod
-    def reference_impl(self, *args: Any) -> None:
-        ...
+
+    def _dims(self, kind: str = "") -> tuple[str,...]:
+        if kind == "":
+            return tuple(self.AXES)
+        return tuple([
+            a for a, k in zip(self.AXES, self.KINDS)
+            if k == kind
+        ])
 
 class TVMOperatorMatmul(TVMOperator):
     DEFAULT_NAME = "matmul"
+    AXES = "ijk"
+    KINDS= "PPR"
+
+    @override
+    def dims(self, kind: str = "") -> tuple[str,...]:
+        return self._dims(kind)
+
+    @override
+    def dims_sizes(self) -> dict[str, int]:
+        i, j, k, _ = self.args
+        return {"i": i, "j": j, "k": k}
+
     @override
     def generate_op(self) -> Any:
-        i, j, k, dtype = self.args
-        A = te.placeholder((i, k), name="A")
-        B = te.placeholder((k, j), name="B")
-        k = te.reduce_axis((0, k), "k")
+        Ki, Kj, Kk, dtype = self.args
+        A = te.placeholder((Ki, Kk), name="A", dtype=dtype)
+        B = te.placeholder((Kk, Kj), name="B", dtype=dtype)
+        k = te.reduce_axis((0, Kk), "k")
         O = te.compute(
-            (i, j),
-            lambda i, j: te.sum(A[i, k] * B[k, j], axis=k),
-            attrs={"layout_free_placeholders": [B]},
+            (Ki, Kj),
+            lambda i, j: (
+                te.sum(
+                    A[i, k] * B[k, j],
+                    axis=k,
+                )
+            ),
             name=self.name,
         )
         return A, B, O
 
     @override
     def inputs_dims(self) -> tuple[tuple[int,...],...]:
-        i, j, k, dtype = self.args
+        i, j, k, _ = self.args
         return (i, k), (k, j)
 
     @override
     def inputs_types(self) -> tuple[str,...]:
-        i, j, k, dtype = self.args
+        dtype = self.args[-1]
         return dtype, dtype
 
     @override
     def outputs_dims(self) -> tuple[tuple[int,...],...]:
-        i, j, k, dtype = self.args
+        i, j = self.args[:2]
         return (i, j),
 
     @override
     def outputs_types(self) -> tuple[str,...]:
-        i, j, k, dtype = self.args
+        dtype = self.args[-1]
         return dtype,
-
-    @override
-    def reference_impl(self, *args: Any) -> None:
-        np.matmul(args[0], args[1], out=args[2])
 
 
 class TVMOperatorRelu(TVMOperator):
     DEFAULT_NAME = "relu"
     DEFAULT_THRESHOLD = 0
+    AXES = "i"
+    KINDS= "P"
+
     def __init__(self, args: tuple[Any,...], attrs: dict[str, Any], name: str|None = None) -> None:
         attrs = {
             "threshold": self.DEFAULT_THRESHOLD,
@@ -217,11 +258,20 @@ class TVMOperatorRelu(TVMOperator):
         super().__init__(args, attrs, name)
 
     @override
+    def dims(self, kind: str = "") -> tuple[str,...]:
+        return self._dims(kind)
+
+    @override
+    def dims_sizes(self) -> dict[str, int]:
+        i, _ = self.args
+        return {"i": i}
+
+    @override
     def generate_op(self) -> Any:
-        i, dtype = self.args
-        A = te.placeholder((i,), name="A")
+        Ki, dtype = self.args
+        A = te.placeholder((Ki,), name="A", dtype=dtype)
         O = te.compute(
-            (i,),
+            (Ki,),
             lambda i,: tvm.tir.max(self.attrs["threshold"], A[i]),
             name=self.name,
         )
@@ -229,28 +279,100 @@ class TVMOperatorRelu(TVMOperator):
 
     @override
     def inputs_dims(self) -> tuple[tuple[int,...],...]:
-        i, dtype = self.args
+        i, _ = self.args
         return (i,),
 
     @override
     def inputs_types(self) -> tuple[str,...]:
-        i, dtype = self.args
+        _, dtype = self.args
         return dtype,
 
     @override
     def outputs_dims(self) -> tuple[tuple[int,...],...]:
-        i, dtype = self.args
+        i, _ = self.args
         return (i,),
 
     @override
     def outputs_types(self) -> tuple[str,...]:
-        i, dtype = self.args
+        _, dtype = self.args
         return dtype,
 
+
+class TVMOperatorConv2D(TVMOperator):
+    DEFAULT_NAME = "conv2d"
+    AXES = "bhwfrsc"
+    KINDS= "PPPPRRR"
+
+    DEFAULT_STRIDE = (1, 1)
+
+    def __init__(self, args: tuple[Any,...], attrs: dict[str, Any], name: str|None = None) -> None:
+        attrs = {
+            "stride": self.DEFAULT_STRIDE,
+            **attrs
+        }
+        super().__init__(args, attrs, name)
+
     @override
-    def reference_impl(self, *args: Any) -> None:
-        np.maximum(args[0], self.attrs["threshold"], out=args[1])
+    def dims(self, kind: str = "") -> tuple[str,...]:
+        return self._dims(kind)
+
+    @override
+    def dims_sizes(self) -> dict[str, int]:
+        b, h, w, f, r, s, c, _ = self.args
+        return {"b": b, "h": h, "w": w, "f": f, "r": r, "s": s, "c": c}
+
+
+    @override
+    def generate_op(self) -> Any:
+        Kb, Kh, Kw, Kf, Kr, Ks, Kc, dtype = self.args
+        inps_dims = self.inputs_dims()
+        A = te.placeholder(inps_dims[0], name="A", dtype=dtype)
+        W = te.placeholder(inps_dims[1], name="W", dtype=dtype)
+        r = te.reduce_axis((0, Kr), "r")
+        s = te.reduce_axis((0, Ks), "s")
+        c = te.reduce_axis((0, Kc), "c")
+        out_dims = self.outputs_dims()[0]
+        Ksh, Ksw = self.attrs["stride"]
+        O = te.compute(
+            out_dims,
+            lambda b, h, w, f: (
+                te.sum(
+                    A[b, h * Ksh + r, w * Ksw + s, c] * W[r, s, c, f],
+                    axis=(r, s, c),
+                )
+            ),
+            name=self.name,
+        )
+        return A, W, O
+
+    @override
+    def inputs_dims(self) -> tuple[tuple[int,...],...]:
+        b, h, w, f, r, s, c, _ = self.args
+        sh, sw = self.attrs["stride"]
+        return ((b, h * sh + r - 1, w * sw + s - 1, c), (r, s, c, f))
+
+    @override
+    def inputs_types(self) -> tuple[str,...]:
+        dtype = self.args[-1]
+        return dtype, dtype
+
+    @override
+    def outputs_dims(self) -> tuple[tuple[int,...],...]:
+        b, h, w, f = self.args[:4]
+        return (b, h, w, f),
+
+    @override
+    def outputs_types(self) -> tuple[str,...]:
+        dtype = self.args[-1]
+        return dtype,
+
 
 class TVMOperators():
+    @classmethod
+    def from_name(cls, name: str) -> Type[TVMOperator]:
+        assert hasattr(cls, name), f"unknown operator name: {name}"
+        return getattr(cls, name)
+
     matmul = TVMOperatorMatmul
     relu = TVMOperatorRelu
+    conv2d = TVMOperatorConv2D
