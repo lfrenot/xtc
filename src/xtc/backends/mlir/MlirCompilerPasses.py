@@ -76,6 +76,19 @@ class MlirProgramInsertTransformPass():
             with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
                 vector.ApplyLowerOuterProductPatternsOp()
                 vector.ApplyLowerContractionPatternsOp()
+            affine_code = transform.ApplyRegisteredPassOp(
+                transform.AnyOpType.get(),
+                handle,
+                pass_name="convert-linalg-to-affine-loops"
+            )
+            for size in [16,8,4]:
+                affine_code = transform.ApplyRegisteredPassOp(
+                    transform.AnyOpType.get(),
+                    affine_code,
+                    pass_name="affine-super-vectorize",
+                    options= f"virtual-vector-size={size}",
+                )
+            handle = affine_code
         return handle
 
     def _needs_vectorization(self) -> bool:
