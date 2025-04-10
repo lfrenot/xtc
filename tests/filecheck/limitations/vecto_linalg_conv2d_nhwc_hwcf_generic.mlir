@@ -7,12 +7,18 @@ func.func @myfun(
 ) {
   linalg.generic {
       indexing_maps = [
-        affine_map<(n,h,w,f,r,s,c) -> (n,h+r,w+s,c)>,
-        affine_map<(n,h,w,f,r,s,c) -> (r,s,c,f)>,
-        affine_map<(n,h,w,f,r,s,c) -> (n,h,w,f)>],
+        affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1 + d4, d2 + d5, d6)>,
+        affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d4, d5, d6, d3)>,
+        affine_map<(d0, d1, d2, d3, d4, d5, d6) -> (d0, d1, d2, d3)>
+      ],
       iterator_types = [
-        "parallel", "parallel", "parallel", "parallel",
-        "reduction", "reduction", "reduction"
+        "parallel",
+        "parallel",
+        "parallel",
+        "parallel",
+        "reduction",
+        "reduction",
+        "reduction"
       ]
   }
   ins (%I, %K : memref<1x30x30x64xf32>, memref<3x3x64x128xf32>)
@@ -20,7 +26,7 @@ func.func @myfun(
   attrs = {
     loop.dims = ["n","h","w","f","r","s","c"],
     loop.interchange = ["n","h","w","f","r","s","c"],
-    loop.vectorize = ["n"]
+    loop.vectorize = ["f"]
   }
   {
     ^bb0(%0: f32, %1: f32, %2: f32) :
@@ -30,5 +36,6 @@ func.func @myfun(
   }
   return
 }
-// CHECK: vector.transfer_read
-// CHECK: vector.transfer_write
+
+// CHECK-NOT: vector.transfer_read
+// CHECK-NOT: vector.transfer_write
