@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from typing_extensions import override
 from typing import Any, TypeAlias, cast
+from dataclasses import dataclass
+import functools
+import operator
 import threading
 
 from xtc.itf.data import Tensor, TensorType
 
-from .data import XTCTensor, XTCTensorType, ShapeType, DataType
+from .data import XTCTensor, XTCTensorType, XTCConstantTensorType, ShapeType, DataType
 from .operators import (
     XTCOperator,
     XTCOperTensor,
@@ -15,6 +19,7 @@ from .operators import (
     XTCOperPad2D,
     XTCOperReshape,
 )
+from .operation import XTCOperation
 
 __all__ = [
     "XTCExpr",
@@ -24,6 +29,7 @@ __all__ = [
 ]
 
 ArgumentsType: TypeAlias = tuple["XTCExpr",...]
+
 
 class XTCExprCounter():
     def __init__(self) -> None:
@@ -39,6 +45,7 @@ class XTCExprCounter():
     @property
     def count(self):
         return self._count
+
 
 class XTCExpr(ABC):
     _counter = XTCExprCounter()
@@ -60,11 +67,11 @@ class XTCExpr(ABC):
         return str_expr
 
     @abstractmethod
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
+    def forward_types(self, inputs_types: Sequence[TensorType]) -> Sequence[XTCTensorType]:
         ...
 
     @abstractmethod
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
         ...
 
     @property
@@ -77,45 +84,74 @@ class XTCExpr(ABC):
     def args(self) -> ArgumentsType:
         ...
 
+    @property
+    def uid(self) -> str:
+        return f"%{self._idx}"
+
     @override
     def __str__(self) -> str:
-        return f"{self._idx} = ?"
+        return f"{self.uid} = ?"
+
 
 class XTCValueExpr(XTCExpr):
-    def __init__(self, value: Any|None = None) -> None:
-        super().__init__()
-        self._value = value
 
     @property
-    def value(self) -> Any|None:
-        return self._value
+    @abstractmethod
+    def value(self) -> Any:
+        ...
+
+    @property
+    @abstractmethod
+    def type(self) -> Any:
+        ...
 
     @property
     @override
     def args(self) -> ArgumentsType:
         return ()
 
-    @override
-    def __str__(self) -> str:
-        return f"%{self._idx} = {self.value}"
 
 class XTCTensorExpr(XTCValueExpr):
     def __init__(
             self,
-            tensor: XTCTensorType|XTCTensor|None = None,
-            shape: ShapeType = None,
-            dtype: DataType = None
+            tensor: XTCTensorType|XTCTensor|ShapeType|None = None,
+            shape: ShapeType|DataType = None,
+            dtype: DataType = None,
     ) -> None:
+        super().__init__()
         if tensor is None:
+            assert shape is None or isinstance(shape, tuple)
+            assert dtype is None or isinstance(dtype, str)
             type = XTCTensorType(shape=shape, dtype=dtype)
             value = XTCTensor(type=type)
-        elif isinstance(tensor, TensorType):
+        elif isinstance(tensor, XTCTensorType):
+            assert shape is None and dtype is None
             value = XTCTensor(type=tensor)
-        else:
-            assert isinstance(tensor, XTCTensor)
+        elif isinstance(tensor, XTCTensor):
+            assert shape is None and dtype is None
             value = tensor
-        super().__init__(value)
+        elif isinstance(tensor, tuple):
+            if shape is not None:
+                assert isinstance(shape, str)
+                assert dtype is None
+                type = XTCTensorType(shape=tensor, dtype=shape)
+            else:
+                type = XTCTensorType(shape=tensor, dtype=dtype)
+            value = XTCTensor(type=type)
+        self._value = value
         self._op = XTCOperTensor()
+
+    @property
+    @override
+    def value(self) -> XTCTensor:
+        assert isinstance(self._value, XTCTensor)
+        return self._value
+
+    @property
+    @override
+    def type(self) -> XTCTensorType:
+        assert isinstance(self._value, XTCTensor)
+        return self._value.type
 
     @property
     @override
@@ -123,21 +159,22 @@ class XTCTensorExpr(XTCValueExpr):
         return self._op.name
 
     @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
+    def forward_types(self, inputs_types: Sequence[TensorType]) -> Sequence[XTCTensorType]:
         assert len(inputs_types) == 0
-        assert self.value and self.value.type.is_constant(), f"Tensor type not constant in tensor initializer"
-        return [self.value.type]
+        assert self.type.is_constant(), f"Tensor type not constant in tensor initializer"
+        return [self.type]
 
     @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
         assert len(inputs) == 0
-        assert self.value and self.value.type.is_constant(), f"Tensor type not constant in tensor initializer"
-        return [self.value.type]
+        assert self.type.is_constant(), f"Tensor type not constant in tensor initializer"
+        return [self.value]
 
     @override
     def __str__(self) -> str:
-        args = ", ".join([f"%{arg._idx}" for arg in self.args])
-        return f"%{self._idx} = {self.op_name}({args})"
+        args = ", ".join([arg.uid for arg in self.args])
+        return f"{self.uid} = {self.op_name}({args})"
+
 
 class XTCOpExpr(XTCExpr):
     def __init__(self, op: XTCOperator, args: ArgumentsType) -> None:
@@ -156,37 +193,47 @@ class XTCOpExpr(XTCExpr):
         return self._args
 
     @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
-        assert len(inputs_types) == len(self.args), f"len of inputs types mismatch : {len(inputs_types)} == {len(self.args)}"
+    def forward_types(self, inputs_types: Sequence[TensorType]) -> Sequence[XTCTensorType]:
+        assert len(inputs_types) == len(self.args), (
+            f"len of inputs types mismatch : {len(inputs_types)} == {len(self.args)}"
+        )
         return self._op.forward_types(inputs_types)
 
     @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
-        assert len(inputs) == len(self.args), f"len of inputs mismatch : {len(inputs)} == {len(self.args)}"
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
+        assert len(inputs) == len(self.args), (
+            f"len of inputs mismatch : {len(inputs)} == {len(self.args)}"
+        )
         return self._op.forward(inputs)
 
     @override
     def __str__(self) -> str:
-        params = [f"%{arg._idx}" for arg in self.args]
+        params = [arg.uid for arg in self.args]
         params += [f"{attr}={value}" for attr, value in self._op.attrs.__dict__.items()]
         args = ", ".join(params)
-        return f"%{self._idx} = {self.op_name}({args})"
+        return f"{self.uid} = {self.op_name}({args})"
+
 
 class XTCMatmulExpr(XTCOpExpr):
     def __init__(self, x: XTCExpr, y: XTCExpr, **attrs: Any) -> None:
         super().__init__(XTCOperMatmul(**attrs), (x, y,))
 
+
 class XTCReluExpr(XTCOpExpr):
     def __init__(self, inp: XTCExpr, **attrs: Any) -> None:
         super().__init__(XTCOperRelu(**attrs), (inp,))
+
+
 
 class XTCConv2DExpr(XTCOpExpr):
     def __init__(self, inp: XTCExpr, weight: XTCExpr, **attrs: Any) -> None:
         super().__init__(XTCOperConv2D(**attrs), (inp, weight,))
 
+
 class XTCPad2DExpr(XTCOpExpr):
     def __init__(self, inp: XTCExpr, **attrs: Any) -> None:
         super().__init__(XTCOperPad2D(**attrs), (inp,))
+
 
 class XTCReshapeExpr(XTCOpExpr):
     def __init__(self, x: XTCExpr, **attrs: Any) -> None:

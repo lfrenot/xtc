@@ -24,34 +24,40 @@ __all__ = [
     "type",
 ]
 
-def matmul(a: XTCExpr, b: XTCExpr, **attrs: Any) -> XTCExpr:
+def matmul(a: XTCExpr, b: XTCExpr, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCMatmulExpr(a, b, **attrs)
+        XTCMatmulExpr(a, b, **attrs),
+        name=name,
     )
 
-def conv2d(inp: XTCExpr, weight: XTCExpr, **attrs: Any) -> XTCExpr:
+def conv2d(inp: XTCExpr, weight: XTCExpr, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCConv2DExpr(inp, weight, **attrs)
+        XTCConv2DExpr(inp, weight, **attrs),
+        name=name,
     )
 
-def pad2d(inp: XTCExpr, **attrs: Any) -> XTCExpr:
+def pad2d(inp: XTCExpr, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCPad2DExpr(inp, **attrs)
+        XTCPad2DExpr(inp, **attrs),
+        name=name,
     )
 
-def relu(inp: XTCExpr, **attrs: Any) -> XTCExpr:
+def relu(inp: XTCExpr, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCReluExpr(inp, **attrs)
+        XTCReluExpr(inp, **attrs),
+        name=name,
     )
 
-def reshape(inp: XTCExpr, **attrs: Any) -> XTCExpr:
+def reshape(inp: XTCExpr, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCReshapeExpr(inp, **attrs)
+        XTCReshapeExpr(inp, **attrs),
+        name=name,
     )
 
-def tensor(*args: Any, **attrs: Any) -> XTCExpr:
+def tensor(*args: Any, name: str|None = None, **attrs: Any) -> XTCExpr:
     return XTCGraphContext.append(
-        XTCTensorExpr(*args, **attrs)
+        XTCTensorExpr(*args, **attrs),
+        name=name,
     )
 
 def outputs(*outs: XTCExpr) -> None:

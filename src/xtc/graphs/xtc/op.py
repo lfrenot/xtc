@@ -1,2 +1,2 @@
 from .builder import graph_builder as graph
-from .operations import *
+from .op_factory import *

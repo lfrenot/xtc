@@ -1,15 +1,13 @@
-from typing import Any
+from typing import Any, cast
 import threading
-
-from xtc.itf.graph import Graph
 
 from .graph import XTCGraph
 from .node import XTCNode
-from .expr import XTCExpr, XTCOpExpr
+from .expr import XTCExpr, XTCOpExpr, XTCTensorExpr
 
 
 __all__ = [
-    "XTCGraphContext",
+    "XTCGraphScope",
 ]
 
 
@@ -18,12 +16,14 @@ class XTCGraphScope():
 
     def __init__(self, **graph_kwargs: Any) -> None:
         self._exprs: list[XTCExpr] = []
+        self._names: list[str|None] = []
         self._outputs: list[XTCExpr] = []
         self._inputs: list[XTCExpr] = []
         self._graph_kwargs = graph_kwargs
 
-    def add_exprs(self, *exprs: XTCExpr) -> None:
-        self._exprs.extend(exprs)
+    def add_expr(self, expr: XTCExpr, name: str|None = None) -> None:
+        self._exprs.append(expr)
+        self._names.append(name)
 
     def add_outputs(self, *outs: XTCExpr) -> None:
         self._outputs.extend(outs)
@@ -53,23 +53,35 @@ class XTCGraphScope():
         return outputs
 
     @classmethod
-    def _node_from_expr(cls, expr: XTCExpr) -> XTCNode:
+    def _node_from_expr(cls, expr: XTCExpr, name: str|None = None) -> XTCNode:
         with threading.Lock():
             if expr._idx not in cls._expr_nodes_map:
-                cls._expr_nodes_map[expr._idx] = XTCNode(expr)
+                cls._expr_nodes_map[expr._idx] = XTCNode(expr, name=name)
         return cls._expr_nodes_map[expr._idx]
 
     @property
-    def graph(self) -> Graph:
+    def graph(self) -> XTCGraph:
         graph = XTCGraph(**self._graph_kwargs)
         inputs = self._infer_inputs(self._inputs)
         outputs = self._infer_outputs(self._outputs)
-        nodes = [self._node_from_expr(expr) for expr in self._exprs]
+        nodes = [
+            self._node_from_expr(expr, name)
+            for expr, name in zip(self._exprs, self._names)
+        ]
         nodes_inputs = [self._node_from_expr(expr) for expr in inputs]
         nodes_outputs = [self._node_from_expr(expr) for expr in outputs]
         graph.add_nodes(nodes)
         graph.set_inputs(nodes_inputs)
         graph.set_outputs(nodes_outputs)
+        if all([
+                isinstance(node._expr, XTCTensorExpr) and node._expr.type.is_constant()
+                for node in graph.inputs_nodes
+        ]):
+            inputs_types = [
+                cast(XTCTensorExpr, node._expr).type
+                for node in graph.inputs_nodes
+            ]
+            graph.forward_types(inputs_types)
         return graph
 
 
@@ -91,9 +103,9 @@ class XTCGraphScopes(threading.local):
     def current(self) -> XTCGraphScope:
         return self._scopes[-1]
 
-    def append(self, expr: XTCExpr) -> XTCExpr:
+    def append(self, expr: XTCExpr, name: str|None = None) -> XTCExpr:
         for scope in self._scopes:
-            scope.add_exprs(expr)
+            scope.add_expr(expr, name)
         return expr
 
     def outputs(self, *outs: XTCExpr) -> None:

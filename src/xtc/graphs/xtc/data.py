@@ -5,7 +5,14 @@ import operator
 import numpy as np
 import numpy.typing
 
-from xtc.itf.data import Tensor, TensorType, ShapeType, DataType
+from xtc.itf.data import (
+    Tensor,
+    TensorType,
+    ShapeType, DataType,
+    ConstantTensorType,
+    ConstantShapeType,
+    ConstantDataType
+)
 
 
 __all__ = [
@@ -70,6 +77,13 @@ class XTCTensorType(TensorType):
         assert self.is_constant_dtype(), "TODO: symboling shapes not implemented"
         return cast(str, self.dtype)
 
+    @property
+    def constant(self) -> "XTCConstantTensorType":
+        return XTCConstantTensorType(
+            shape=self.constant_shape,
+            dtype=self.constant_dtype,
+        )
+
     @override
     def __repr__(self) -> str:
         return f"TensorType(shape={self._shape}, dtype={self._dtype})"
@@ -79,6 +93,22 @@ class XTCTensorType(TensorType):
         if not isinstance(other, XTCTensorType):
             return NotImplemented
         return self.dtype == other.dtype and self.shape == other.shape
+
+class XTCConstantTensorType(XTCTensorType, ConstantTensorType):
+    def __init__(self, shape: ConstantShapeType, dtype: ConstantDataType):
+        self._shape: ConstantShapeType = shape
+        self._dtype: ConstantDataType = dtype
+
+    @property
+    @override
+    def shape(self) -> ConstantShapeType:
+        return self._shape
+
+    @property
+    @override
+    def dtype(self) -> ConstantDataType:
+        return self._dtype
+
 
 class XTCTensor(Tensor):
     def __init__(self, data: Any|None = None, type: XTCTensorType|None = None) -> None:
@@ -90,7 +120,7 @@ class XTCTensor(Tensor):
 
     @property
     @override
-    def type(self) -> TensorType:
+    def type(self) -> XTCTensorType:
         return self._type
 
     @property
