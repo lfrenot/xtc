@@ -12,8 +12,6 @@ from xdsl.dialects.builtin import (
     AnyMemRefType,
     AnyIntegerAttr,
     FloatAttr,
-    DictionaryAttr,
-    UnitAttr,
     IntegerType,
 )
 
