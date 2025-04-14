@@ -11,11 +11,13 @@ def requires_jir(*arg):
 
 
 def matmul_impl(i, j, k, dtype, name):
+    import xtc.graphs.xtc.op as O
     from xtc.backends.jir import JIRBackend
-    from xtc.backends.jir.JIROps import JIROperators, JIROperation
-    op = JIROperation(JIROperators.matmul, (i, j, k, dtype), name=name)
-    impl = JIRBackend(
-        source_op=op,
-        dims=dict(i=i, j=j, k=k),
-    )
-    return impl
+
+    a = O.tensor((i, k), dtype, name="A")
+    b = O.tensor((k, j), dtype, name="B")
+
+    with O.graph(name=name) as gb:
+        O.matmul(a, b, name="C")
+
+    return JIRBackend(gb.graph)

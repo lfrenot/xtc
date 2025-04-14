@@ -1,5 +1,5 @@
 
-from mlir_utils import requires_mlir, matmul_impl, matmul_node_impl, matmul_ref, get_matmul_params
+from mlir_utils import requires_mlir, matmul_impl
 
 I, J, K, DTYPE = 128, 256, 91, "float32"
 MATMUL_ARGS = (I, J, K, DTYPE)
@@ -75,44 +75,34 @@ def check_op_evaluate(impl, schedule, init_zero=False):
     assert isinstance(result, float) and float(result) > 0
 
 def check_evaluate(impl, schedule):
-    # For now when a graph implementer, need to pass
-    # reference impl and parameters
-    result = impl.evaluate(
-        schedule,
-        evaluate_args=dict(
-            reference_impl=matmul_ref,
-            parameters=get_matmul_params(*MATMUL_ARGS),
-        ),
-    )
+    result = impl.evaluate(schedule)
     print(f"Result: {result}")
     assert isinstance(result, float) and float(result) > 0
 
 @requires_mlir
 def test_sched_nop():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_nop)
     check_evaluate(impl, schedule)
 
 @requires_mlir
 def test_sched_tile2():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile2)
     check_evaluate(impl, schedule)
 
 @requires_mlir
 def test_sched_tile2p():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile2p)
     check_evaluate(impl, schedule)
 
 @requires_mlir
 def test_sched_tile3wc():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
+    print(impl.graph)
     schedule = check_schedule(impl, sched_tile3wc)
     check_evaluate(impl, schedule)
-
-@requires_mlir
-def test_node_matmul():
-    impl = matmul_node_impl(*MATMUL_ARGS, "matmul")
-    schedule = impl.get_scheduler().schedule()
-    check_op_evaluate(impl, schedule, init_zero=True)

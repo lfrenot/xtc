@@ -229,8 +229,8 @@ class JIRScheduler(itf.schd.Scheduler):
         self._backend = backend
         self._transformer = JIRSchedulerAdaptor(
             self._backend.dims,
-            self._backend.source_op.dim_names,
-            self._backend.source_op.axes_names,
+            self._backend.op.dim_names,
+            self._backend.op.axes_names,
         )
 
     def _generate_transform(self) -> tuple[list[str], dict[str,int]]:

@@ -25,6 +25,7 @@ class MlirNodeBackend(MlirBackend):
         no_alias: bool = False,
         id: str | None = None,
     ):
+        self._graph = None
         if id is None:
             self.op_id_attribute = f"__id{MlirNodeBackend.count}__"
             MlirNodeBackend.count += 1
@@ -69,10 +70,3 @@ class MlirNodeBackend(MlirBackend):
         list_attr_tys = [i.type for i in self.source_op.outputs] # type: ignore
         list_memref_tys = cast(list[xdslAnyMemRefType], list_attr_tys)
         return self._np_types_spec(list_memref_tys)
-
-    @override
-    def reference_impl(self, *args: Any) -> None:
-        if self.source_op.name == "linalg.matmul":
-            np.matmul(args[0], args[1], out=args[2])
-        else:
-            assert 0, f"unknown implementation for operation: {self.source_op.name}"

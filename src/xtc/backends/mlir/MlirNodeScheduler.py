@@ -93,6 +93,6 @@ class MlirNodeScheduler():
 
     def unroll(self, unrolling: dict[str, int]):
         for dim,ufactor in unrolling.items():
-            if not dim in self.vectorization:
-                self.unrolling[dim] = ufactor
+            #if not dim in self.vectorization:
+            self.unrolling[dim] = ufactor
 

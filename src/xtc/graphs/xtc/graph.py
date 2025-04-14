@@ -1,4 +1,5 @@
 from typing_extensions import override
+from collections.abc import Sequence, Mapping
 from typing import TypeAlias, cast
 
 from xtc.itf.graph import Graph, Node
@@ -6,7 +7,7 @@ from xtc.itf.data import TensorType, Tensor
 
 from .node import XTCNode
 from .utils import XTCGraphUtils
-from .data import XTCTensorType
+from .data import XTCTensor, XTCTensorType
 
 __all__ = [
     "XTCGraph",
@@ -34,29 +35,29 @@ class XTCGraph(Graph):
 
     @property
     @override
-    def nodes(self) -> dict[str, Node]:
-        return {node.name: node for node in self._nodes}
+    def nodes(self) -> Mapping[str, Node]:
+        return {node.uid: node for node in self._nodes}
 
     @property
     @override
-    def inputs(self) -> list[str]:
-        return [node.name for node in self._inputs]
+    def inputs(self) -> Sequence[str]:
+        return [node.uid for node in self._inputs]
 
     @property
     @override
-    def outputs(self) -> list[str]:
-        return [node.name for node in self._outputs]
-
-    def add_nodes(self, nodes: NodesType) -> None:
-        self._nodes.extend(nodes)
+    def outputs(self) -> Sequence[str]:
+        return [node.uid for node in self._outputs]
 
     @property
-    def inputs_nodes(self) -> list["XTCNode"]:
+    def inputs_nodes(self) -> Sequence["XTCNode"]:
         return self._inputs
 
     @property
-    def outputs_nodes(self) -> list["XTCNode"]:
+    def outputs_nodes(self) -> Sequence["XTCNode"]:
         return self._outputs
+
+    def add_nodes(self, nodes: NodesType) -> None:
+        self._nodes.extend(nodes)
 
     def set_inputs(self, inputs: InputsType) -> None:
         self._inputs = inputs
@@ -65,27 +66,39 @@ class XTCGraph(Graph):
         self._outputs = outputs
 
     @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
-        assert len(inputs_types) == len(self._inputs), f"forward types inputs size mismatch: {len(inputs_types)} != {len(self._inputs)}"
+    def forward_types(self, inputs_types: Sequence[TensorType]) -> Sequence[XTCTensorType]:
+        assert len(inputs_types) == len(self._inputs), (
+            f"forward types inputs size mismatch: {len(inputs_types)} != {len(self._inputs)}"
+        )
         nodes = XTCGraphUtils.get_nodes_topological(self._nodes)
-        outputs_map = {node: inp_type for node, inp_type in zip(self.inputs, inputs_types)}
+        outputs_map = {
+            node_uid: cast(XTCTensorType, inp_type)
+            for node_uid, inp_type
+            in zip(self.inputs, inputs_types)
+        }
         for node in nodes:
-            inp_types = [outputs_map[inp_node] for inp_node in node.inputs]
+            inp_types = [outputs_map[node_uid] for node_uid in node.inputs]
             out_types = node.forward_types(inp_types)
-            outputs_map[node.name] = out_types[0]
-        outputs_types = [outputs_map[out_node] for out_node in self.outputs]
+            outputs_map[node.uid] = out_types[0]
+        outputs_types = [outputs_map[node_uid] for node_uid in self.outputs]
         return outputs_types
 
     @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
-        assert len(inputs) == len(self._inputs), f"forward types inputs size mismatch: {len(inputs)} != {len(self._inputs)}"
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
+        assert len(inputs) == len(self._inputs), (
+            f"forward types inputs size mismatch: {len(inputs)} != {len(self._inputs)}"
+        )
         nodes = XTCGraphUtils.get_nodes_topological(self._nodes)
-        outputs_map = {node: inp for node, inp in zip(self.inputs, inputs)}
+        outputs_map = {
+            node_uid: cast(XTCTensor, inp)
+            for node_uid, inp
+            in zip(self.inputs, inputs)
+        }
         for node in nodes:
-            inps = [outputs_map[inp_node] for inp_node in node.inputs]
+            inps = [outputs_map[node_uid] for node_uid in node.inputs]
             outs = node.forward(inps)
-            outputs_map[node.name] = outs[0]
-        outputs = [outputs_map[out_node] for out_node in self.outputs]
+            outputs_map[node.uid] = outs[0]
+        outputs = [outputs_map[node_uid] for node_uid in self.outputs]
         return outputs
 
     @override
@@ -96,20 +109,20 @@ class XTCGraph(Graph):
             graph_str += f"  name: {self._name}\n"
         if len(self._inputs) > 0:
             graph_str += "  inputs:\n"
-            for name in self.inputs:
-                graph_str += f"  - {name}\n"
+            for node_uid in self.inputs:
+                graph_str += f"  - {node_uid}\n"
         else:
             graph_str += "  inputs: []\n"
         if len(self._outputs) > 0:
             graph_str += "  outputs:\n"
-            for name in self.outputs:
-                graph_str += f"  - {name}\n"
+            for node_uid in self.outputs:
+                graph_str += f"  - {node_uid}\n"
         else:
             graph_str += "  outputs: []\n"
         if len(self._nodes) > 0:
             graph_str += "  nodes:\n"
             for node in nodes:
-                graph_str += f"    {node.name}: {node}\n"
+                graph_str += f"  - {node.uid}: {node}\n"
         else:
             graph_str += "  nodes: {}\n"
         return graph_str

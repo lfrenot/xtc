@@ -4,7 +4,8 @@ from pathlib import Path
 from typing_extensions import override
 
 import xtc.itf as itf
-from xtc.itf.data import TensorType, Tensor
+from xtc.itf.graph import Graph
+from xtc.graphs.xtc.graph import XTCGraph
 
 from .TVMOps import TVMOperation
 from .TVMScheduler import TVMScheduler
@@ -14,135 +15,51 @@ __all__ = [
     "TVMBackend",
 ]
 
-class TVMOperator(itf.operator.Operator):
-    def __init__(
-            self,
-            source_op: TVMOperation,
-    ):
-        self._operator = source_op.operator
-
-    @property
-    @override
-    def name(self) -> str:
-        return self._operator.name
-
-    @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
-        raise RuntimeError("not implemented")
-
-    @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
-        raise RuntimeError("not implemented")
-
-
-class TVMNode(itf.graph.Node):
-    def __init__(
-            self,
-            name: str,
-            operator: TVMOperator,
-            dims: dict[str,int],
-            parallel_dims: list[str],
-    ) -> None:
-        self._name = name
-        self._operator = operator
-        self._dims = dims
-        self._parallel_dims = parallel_dims
-
-    @property
-    @override
-    def name(self) -> str:
-        return self._name
-
-    @property
-    @override
-    def operator(self) -> itf.operator.Operator:
-        return self._operator
-
-    @property
-    @override
-    def inputs(self) -> list[str]:
-        # TODO: Node inputs undefined for now
-        return []
-
-    @property
-    @override
-    def outputs(self) -> list[str]:
-        # Tensor output 0 is node name
-        return [self.name]
-
-    @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
-        raise RuntimeError("not implemented")
-
-    @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
-        raise RuntimeError("not implemented")
-
-
-class TVMGraph(itf.graph.Graph):
-    def __init__(
-            self,
-            name: str,
-            nodes: list[TVMNode],
-    ) -> None:
-        assert len(nodes) > 0
-        self._name = name
-        self._nodes = nodes
-        self._inputs = [nodes[0].name]
-        self._outputs = [nodes[-1].name]
-
-    @property
-    @override
-    def name(self) -> str:
-        return self._name
-
-    @property
-    @override
-    def nodes(self) -> dict[str, itf.graph.Node]:
-        return {node.name: node for node in self._nodes}
-
-    @property
-    @override
-    def inputs(self) -> list[str]:
-        return self._inputs
-
-    @property
-    @override
-    def outputs(self) -> list[str]:
-        return self._outputs
-
-    @override
-    def forward_types(self, inputs_types: list[TensorType]) -> list[TensorType]:
-        raise RuntimeError("not implemented")
-
-    @override
-    def forward(self, inputs: list[Tensor]) -> list[Tensor]:
-        raise RuntimeError("not implemented")
-
 
 class TVMBackend(itf.back.Backend):
     def __init__(
             self,
-            source_op: TVMOperation,
-            dims: dict[str,int],
-            parallel_dims: list[str],
+            source_op: TVMOperation|Graph,
+            dims: dict[str,int]|None = None,
+            parallel_dims: list[str]|None = None,
+            reduction_dims: list[str]|None = None,
+            **kwargs: Any,
     ) -> None:
-        self.op = source_op
-        self.dims = dims
-        self.parallel_dims = parallel_dims
-        self.payload_name = self.op.name
-        self._nodes = [
-            TVMNode(
-                self.payload_name,
-                TVMOperator(source_op),
-                dims,
-                parallel_dims
-            ),
-        ]
-        self._graph = TVMGraph(
-            self.payload_name,
-            self._nodes
+        self._graph: Graph|None = None
+        if isinstance(source_op, XTCGraph):
+            graph = source_op
+            self._graph = graph
+            self.ops = [
+                TVMOperation.from_operation(node.operation, name=node.name)
+                for node in graph.nodes.values()
+            ]
+            self.dims = self.ops[-1].operator.dims_sizes()
+            self.payload_name = self._graph.name
+        else:
+            assert isinstance(source_op, TVMOperation)
+            assert dims is not None
+            self.dims = dims
+            self.ops = [source_op]
+            self.payload_name = source_op.name
+
+        self.op = self.ops[-1]
+
+        assert tuple(self.dims.keys()) == self.op.operator.dims(), (
+            f"incompatible dims names: {tuple(self.dims.keys())} != "
+            f"{self.op.operator.dims()}"
         )
+        self.parallel_dims = self.op.operator.dims("P")
+        self.reduction_dims = self.op.operator.dims("R")
+        if parallel_dims is not None:
+            assert tuple(parallel_dims) == self.parallel_dims, (
+                f"incompatible parallel dims names: {tuple(parallel_dims)} != "
+                f"{self.parallel_dims}"
+            )
+        if reduction_dims is not None:
+            assert tuple(reduction_dims) == self.reduction_dims, (
+                f"incompatible reduction dims names: {tuple(reduction_dims)} != "
+                f"{self.reduction_dims}"
+            )
 
     @override
     def get_scheduler(self, **kwargs: Any) -> itf.schd.Scheduler:
@@ -155,6 +72,7 @@ class TVMBackend(itf.back.Backend):
     @property
     @override
     def graph(self) -> itf.graph.Graph:
+        assert self._graph is not None
         return self._graph
 
     def evaluate(

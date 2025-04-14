@@ -13,11 +13,12 @@ from xtc.utils.tools import (
 )
 
 import xtc.itf as itf
+from xtc.itf.graph import Graph
+from xtc.graphs.xtc.graph import XTCGraph
 
 from .JIROps import JIROperation
 from .JIRScheduler import JIRScheduler
 from .JIRCompiler import JIRCompiler
-from .JIRGraph import JIROperator, JIRNode, JIRGraph
 
 __all__ = [
     "JIRBackend",
@@ -26,29 +27,51 @@ __all__ = [
 class JIRBackend(itf.back.Backend):
     def __init__(
             self,
-            source_op: JIROperation,
-            dims: dict[str,int],
+            source_op: JIROperation|Graph,
+            dims: dict[str,int]|None = None,
+            parallel_dims: list[str]|None = None,
+            reduction_dims: list[str]|None = None,
             **kwargs: Any,
     ) -> None:
-        self.payload_name = source_op.name
-        self.source_op = source_op
-        self.args = self.source_op.args
-        self.dims = dims
+        self._graph: Graph|None = None
+        if isinstance(source_op, XTCGraph):
+            graph = source_op
+            self._graph = graph
+            self.ops = [
+                JIROperation.from_operation(node.operation, name=node.name)
+                for node in graph.nodes.values()
+            ]
+            self.dims = self.ops[-1].operator.dims_sizes()
+            self.payload_name = self._graph.name
+        else:
+            assert isinstance(source_op, JIROperation)
+            assert dims is not None
+            self.dims = dims
+            self.ops = [source_op]
+            self.payload_name = source_op.name
+
+        self.op = self.ops[-1]
+
+        assert tuple(self.dims.keys()) == self.op.operator.dims(), (
+            f"incompatible dims names: {tuple(self.dims.keys())} != "
+            f"{self.op.operator.dims()}"
+        )
+        self.parallel_dims = self.op.operator.dims("P")
+        self.reduction_dims = self.op.operator.dims("R")
+        if parallel_dims is not None:
+            assert tuple(parallel_dims) == self.parallel_dims, (
+                f"incompatible parallel dims names: {tuple(parallel_dims)} != "
+                f"{self.parallel_dims}"
+            )
+        if reduction_dims is not None:
+            assert tuple(reduction_dims) == self.reduction_dims, (
+                f"incompatible reduction dims names: {tuple(reduction_dims)} != "
+                f"{self.reduction_dims}"
+            )
         self._geist_install_dir = get_geist_prefix()
-        self._op_function_str, self._jir_function_str = self.source_op.generate()
+        self._op_function_str, self._jir_function_str = self.op.generate(self.payload_name)
         self._jir_function_op = self._parse_function(self._jir_function_str)
         self._op_function_mlir = self._parse_primitives(self._op_function_str)
-        self._nodes = [
-            JIRNode(
-                self.payload_name,
-                JIROperator(source_op),
-                dims,
-            ),
-        ]
-        self._graph = JIRGraph(
-            self.payload_name,
-            self._nodes
-        )
 
     @override
     def get_scheduler(self, **kwargs: Any) -> itf.schd.Scheduler:
@@ -61,6 +84,7 @@ class JIRBackend(itf.back.Backend):
     @property
     @override
     def graph(self) -> itf.graph.Graph:
+        assert self._graph is not None
         return self._graph
 
     def evaluate(

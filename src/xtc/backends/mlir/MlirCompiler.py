@@ -85,9 +85,7 @@ class MlirCompiler(itf.comp.Compiler):
             f"{compiler.dump_file}.so",
             "shlib",
             bare_ptr=compiler.bare_ptr,
-            np_inputs_spec=self._backend.np_inputs_spec,
-            np_outputs_spec=self._backend.np_outputs_spec,
-            reference_impl=self._backend.reference_impl,
+            graph=self._backend._graph,
         )
         if temp_dir is not None:
             shutil.rmtree(temp_dir)

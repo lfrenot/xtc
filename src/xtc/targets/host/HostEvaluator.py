@@ -22,11 +22,10 @@ class HostEvaluator(itf.exec.Evaluator):
     def __init__(self, module: "host.HostModule", **kwargs: Any) -> None:
         self._module = module
         self._repeat = kwargs.get("repeat", 1)
-        self._min_repeat_ms = kwargs.get("min_repeat_ms", 0)
+        self._min_repeat_ms = kwargs.get("min_repeat_ms", 100)
         self._number = kwargs.get("number", 1)
         self._validate = kwargs.get("validate", False)
         self._parameters = kwargs.get("parameters")
-        self._reference_impl = kwargs.get("reference_impl")
         self._init_zero = kwargs.get("init_zero", False)
         self._np_inputs_spec = kwargs.get("np_inputs_spec", self._module._np_inputs_spec)
         self._np_outputs_spec = kwargs.get("np_outputs_spec", self._module._np_outputs_spec)
@@ -79,17 +78,12 @@ class HostEvaluator(itf.exec.Evaluator):
 
 class HostExecutor(itf.exec.Executor):
     def __init__(self, module: "host.HostModule", **kwargs: Any) -> None:
-        init_zero = kwargs.get("init_zero", False)
-        np_inputs_spec = kwargs.get("np_inputs_spec")
-        np_outputs_spec = kwargs.get("np_outputs_spec")
         self._evaluator = HostEvaluator(
             module=module,
-            init_zero=init_zero,
-            np_inputs_spec = np_inputs_spec,
-            np_outputs_spec = np_outputs_spec,
             repeat=1,
             min_repeat_ms=0,
             number=1,
+            **kwargs,
         )
 
     @override

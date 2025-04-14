@@ -4,7 +4,6 @@ from typing_extensions import override
 from pathlib import Path
 import tempfile
 
-from mlir.dialects import transform
 from xdsl.dialects import func as xdslfunc
 
 import xtc.itf as itf
@@ -20,18 +19,20 @@ class MlirBackend(itf.back.Backend):
             always_vectorize: bool,
             no_alias: bool,
             concluding_passes: list[str],
+            graph: itf.graph.Graph|None = None,
     ):
         self.xdsl_func = xdsl_func
         self.no_alias = no_alias
         self.always_vectorize = always_vectorize
         self.concluding_passes = concluding_passes
         self.payload_name = str(xdsl_func.sym_name).replace('"', "")
-
+        self._graph = graph
 
     @property
     @override
     def graph(self) -> itf.graph.Graph:
-        assert False, "Implementation missing"
+        assert self._graph is not None
+        return self._graph
 
     @override
     def get_scheduler(self, **kwargs: Any) -> itf.schd.Scheduler:
@@ -47,10 +48,6 @@ class MlirBackend(itf.back.Backend):
 
     @abstractmethod
     def np_outputs_spec(self) -> list[dict[str, Any]]:
-        pass
-
-    @abstractmethod
-    def reference_impl(self, *args: Any) -> None:
         pass
 
     def evaluate(

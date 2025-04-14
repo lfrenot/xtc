@@ -69,6 +69,8 @@ import multiprocessing
 import time
 from pathlib import Path
 
+from xtc.itf.graph import Graph
+
 from xtc.utils.numpy import (
     np_init,
 )
@@ -82,187 +84,46 @@ import xtc.runtimes.host.runtime as runtime
 
 logger = logging.getLogger(__name__)
 
-def reference_matmul(a, b, o):
-    np.matmul(a, b, out=o)
+def xtc_matmul_graph(i: int, j: int, k: int, ftype: str, name: str ="matmul"):
+    import xtc.graphs.xtc.op as O
+    dtype = DTYPES_MAP[ftype]
+    a = O.tensor((i, k), dtype, name="A")
+    b = O.tensor((k, j), dtype, name="B")
+    with O.graph(name=name) as gb:
+        O.matmul(a, b, name="C")
+    return gb.graph
 
-def reference_relu(a, o):
-    np.maximum(a, 0, out=o)
+def xtc_relu_graph(i: int, ftype: str, name: str ="relu"):
+    import xtc.graphs.xtc.op as O
+    dtype = DTYPES_MAP[ftype]
+    inp = O.tensor((i,), dtype, name="I")
+    with O.graph(name=name) as gb:
+        O.relu(inp, threshold=0, name="O")
+    return gb.graph
 
-def xdsl_matmul_graph(i, j, k, ftype, name="matmul"):
-    from xdsl.dialects import func, linalg, arith, builtin
-    from xdsl.dialects.builtin import MemRefType, f32, f64, UnitAttr
-    from xdsl.ir import Block, Region
-    from xdsl.builder import ImplicitBuilder
-
-    elt_type = {"f32": f32, "f64": f64}[ftype]
-    ops_types = [MemRefType(elt_type, shape)
-                 for shape in [[i,k], [k,j], [i,j]]]
-    block = Block(arg_types=ops_types)
-    with ImplicitBuilder(block):
-        cst0 = arith.ConstantOp(builtin.FloatAttr(0, 32))
-        fill = linalg.FillOp(
-            res=(),
-            inputs=(cst0.results[0],),
-            outputs=(block.args[2],),
-        )
-        matmul = linalg.MatmulOp(
-            res=(),
-            inputs=(block.args[0], block.args[1]),
-            outputs=(block.args[2],),
-        )
-        func.ReturnOp()
-    fill.attributes["__xtc_id_fill__"] = UnitAttr()
-    matmul.attributes["__xtc_id_matmul__"] = UnitAttr()
-    region = Region([block])
-    payload = func.FuncOp.from_region(
-        name=name,
-        input_types=ops_types,
-        return_types=[],
-        region=region,
-    )
-    args = {f"arg{i}": arg for i, arg in enumerate(block.args)}
-    graph = {
-        "args": args,
-        "inps": ["arg0", "arg1"],
-        "outs": ["arg2"],
-        "payload": payload,
-        "nodes": {
-            "fill": {
-                "args": ["arg2"],
-                "inps": [],
-                "outs": ["arg2"],
-                "dims": ['i','j'],
-                "op": fill,
-            },
-            "matmul": {
-                "args": ["arg0", "arg1", "arg2"],
-                "inps": ["arg0", "arg1", "arg2"],
-                "outs": ["arg2"],
-                "dims": ['i','j','k'],
-                "op": matmul,
-            },
-        },
-    }
-    return graph
-
-def mlir_matmul_impl(i, j, k, ftype, graph):
-    from xdsl.ir import Block, Region
-    from xdsl.dialects.builtin import FunctionType, MemRefType, f32, f64
-    from xdsl.dialects import func
-    from xtc.backends.mlir.MlirGraphBackend import MlirGraphBackend
-    from xtc.backends.mlir.MlirCompiler import MlirCompiler
-    from xtc.backends.mlir.MlirNodeBackend import MlirNodeBackend
-
-    mlir_nodes = {
-        ident: MlirNodeBackend(
-            payload_name=ident,
-            source_op=node["op"],
-            dims=node["dims"],
-            no_alias=True,
-            always_vectorize=False,
-            id=f"__xtc_id_{ident}__",
-        )
-        for ident, node in graph["nodes"].items()
-    }
-    impl = MlirGraphBackend(
-        xdsl_func=graph["payload"],
-        nodes=list(mlir_nodes.values()),
-        no_alias=True,
-        always_vectorize=False,
-    )
-    # compiler = MlirCompiler(
-    #     mlir_module=impl,
-    #     to_disassemble=impl.payload_name,
-    # )
-    # node_scheduler = mlir_nodes["matmul"].get_scheduler()
-    # scheduler = impl.get_scheduler()
-    source_op = mlir_nodes["matmul"].source_op
-    return impl, None, None, None, source_op, "mlir"
-    #return impl, compiler, scheduler, node_scheduler, source_op, "mlir"
-
-def tvm_matmul_graph(i, j, k, ftype, name="matmul"):
-    # Note that mlir, tvm import order causes issues
-    import tvm, tvm.te
-    from xtc.backends.tvm.TVMOps import TVMOperation, TVMOperators
-    matmul = TVMOperation(
-        TVMOperators.matmul,
-        (i, j, k, DTYPES_MAP[ftype]),
-        name=name,
-    )
-    return {
-        "nodes": {
-            "matmul": {
-                "dims": {'i': i,'j': j, 'k': k},
-                "parallel_dims": ['i', 'j'],
-                "reduction_dims": ['k'],
-                "op": matmul,
-            }
-        }
-    }
-
-def tvm_matmul_impl(i, j, k, ftype, graph):
+def tvm_matmul_impl(i: int, j: int, k: int, ftype: str, graph: Graph):
     from xtc.backends.tvm import TVMBackend
-    node = graph["nodes"]["matmul"]
-    impl = TVMBackend(
-        source_op=node["op"],
-        dims=node["dims"],
-        parallel_dims=node["parallel_dims"],
-    )
-    return impl, None, None, None, node["op"], "tvm"
+    impl = TVMBackend(graph)
+    return impl, "tvm"
 
-def jir_matmul_graph(i, j, k, ftype, name="matmul"):
-    from xtc.backends.jir.JIROps import JIROperation, JIROperators
-    matmul = JIROperation(
-        JIROperators.matmul,
-        (i, j, k, DTYPES_MAP[ftype]),
-        name=name,
-    )
-    return {
-        "nodes": {
-            "matmul": {
-                "dims": {'i': i,'j': j, 'k': k},
-                "parallel_dims": ['i', 'j'],
-                "reduction_dims": ['k'],
-                "op": matmul,
-            }
-        }
-    }
+def tvm_relu_impl(i: int, ftype: str, graph: Graph):
+    from xtc.backends.tvm import TVMBackend
+    impl = TVMBackend(graph)
+    return impl, "tvm"
 
 def jir_matmul_impl(i, j, k, ftype, graph):
     from xtc.backends.jir import JIRBackend
-    node = graph["nodes"]["matmul"]
-    impl = JIRBackend(
-        source_op=node["op"],
-        dims=node["dims"],
-    )
-    return impl, None, None, None, node["op"], "jir"
+    impl = JIRBackend(graph)
+    return impl, "jir"
 
-def tvm_relu_graph(i, ftype, threshold=0, name=None):
-    from xtc.backends.tvm.TVMOps import TVMOperation, TVMOperators
-    relu = TVMOperation(
-        TVMOperators.relu,
-        (i, DTYPES_MAP[ftype]),
-        name=name,
+def mlir_matmul_impl(i, j, k, ftype, graph):
+    from xtc.backends.mlir.MlirGraphBackend import MlirGraphBackend
+    impl = MlirGraphBackend(
+        graph,
+        no_alias=True,
+        always_vectorize=False,
     )
-    return {
-        "nodes": {
-            "relu": {
-                "dims": {'i': i},
-                "parallel_dims": ['i'],
-                "op": relu,
-            }
-        }
-    }
-
-def tvm_relu_impl(i, ftype, graph):
-    from xtc.backends.tvm import TVMBackend
-    node = graph["nodes"]["relu"]
-    impl = TVMBackend(
-        source_op=node["op"],
-        dims=node["dims"],
-        parallel_dims=node["parallel_dims"],
-    )
-    return impl, None, None, None, node["op"], "tvm"
+    return impl, "mlir"
 
 def tile_strategy_1d(impl, op_args, in_x):
     i, dtype = op_args
@@ -678,25 +539,15 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
     assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
     implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
-    impl, compiler, scheduler, node_scheduler, source_op, backend_name = implementer(
+    impl, backend_name = implementer(
         *op_args,
         operation
     )
     assert backend_name == backend
-    assert node_scheduler is None
-    assert scheduler is None
-    assert compiler is None
     scheduler = impl.get_scheduler()
     node_scheduler = scheduler # by default the output node is scheduled
     tile_strategy(node_scheduler, op_args, in_x)
     schedule = scheduler.schedule()
-    # if node_scheduler is None:
-    #     node_scheduler = impl.get_scheduler()
-    # tile_strategy(node_scheduler, op_args, in_x)
-    # if scheduler is None:
-    #     schedule = node_scheduler.schedule()
-    # else:
-    #     schedule = scheduler.implement()
     if dump_file is None:
         dump_file = f"{args.explore_dir}/payload_{ident}"
     compile_args = dict(
@@ -723,42 +574,26 @@ def compile_one(ident, backend, operation, tile_strategy, op_args, in_x, args, c
     assert args.eval == "eval"
     compiler = impl.get_compiler(**compile_args)
     module = compiler.compile(schedule=schedule)
-    # if compiler is None:
-    #     compiler = impl.get_compiler(**compile_args)
-    #     module = compiler.compile(schedule=schedule)
-    # else:
-    #     compiler.compile(schedule=schedule, **compile_args)
-    #     module = None
     logger.debug("  Compile done: %s: %s.", ident, in_x)
-    # For now we pass (module, impl) as not all implementation
-    # provide module
-    return (ident, backend, (module, compiler), dump_file, in_x)
+    return (ident, backend, module, dump_file, in_x)
 
-def load_and_evaluate_one(ident, backend, module_compiler, dump_file, in_x, args, callbacks=None):
+def load_and_evaluate_one(ident, backend, module, dump_file, in_x, args, callbacks=None):
     logger.debug("Evaluate: %s: %s...", ident, in_x)
-    module, compiler = module_compiler
-    reference_impl = OPERATORS[args.operator]["reference_impl"]
     evaluator_args = dict(
         repeat=args.repeat,
         number=args.number,
         min_repeat_ms=args.min_repeat_ms,
         validate=args.validate,
         parameters=args.eval_parameters,
-        reference_impl=reference_impl,
     )
-    if module is not None:
-        payload_lib = module.file_name
-        evaluator = module.get_evaluator(**evaluator_args)
-        evaluate = evaluator.evaluate
-    else:
-        payload_lib = f"{dump_file}.so"
-        payload_name = compiler.payload_name
-        evaluate = partial(
-            compiler.load_and_eval,
-            payload_lib,
-            payload_name,
-            **evaluator_args
-        )
+    reference_impl = OPERATORS[args.operator]["reference_impl"]
+    if reference_impl is not None:
+        evaluator_args.update(dict(
+            reference_impl=reference_impl,
+        ))
+    payload_lib = module.file_name
+    evaluator = module.get_evaluator(**evaluator_args)
+    evaluate = evaluator.evaluate
     results, code, error_msg = evaluate()
     if code == 0:
         time = min(results)
@@ -1049,18 +884,18 @@ OPERATORS = {
         "default_type": "f32",
         "inputs": [["i", "k"], ["k", "j"]],
         "outputs": [["i", "j"]],
-        "reference_impl": reference_matmul,
+        "reference_impl": None, # defaults to graph evaluation
         "backends": {
             "mlir": {
-                "operation": xdsl_matmul_graph,
+                "operation": xtc_matmul_graph,
                 "implementer": mlir_matmul_impl,
             },
             "tvm": {
-                "operation": tvm_matmul_graph,
+                "operation": xtc_matmul_graph,
                 "implementer": tvm_matmul_impl,
             },
             "jir": {
-                "operation": jir_matmul_graph,
+                "operation": xtc_matmul_graph,
                 "implementer": jir_matmul_impl,
             },
         },
@@ -1082,10 +917,10 @@ OPERATORS = {
         "default_type": "f32",
         "inputs": [["i"]],
         "outputs": [["i"]],
-        "reference_impl": reference_relu,
+        "reference_impl": None, # defaults to graph evaluation
         "backends": {
             "tvm": {
-                "operation": tvm_relu_graph,
+                "operation": xtc_relu_graph,
                 "implementer": tvm_relu_impl,
             },
         },
@@ -1192,7 +1027,7 @@ def main():
     parser.add_argument("--func-name", type=str, help="function name to generate, default to operator")
     parser.add_argument("--strategy", type=str, choices=list(STRATEGIES.keys()), help="tile strategy to use, default to operator's default")
     parser.add_argument("--search", type=str, choices=["random", "exhaustive", "data"], default="random", help="search strategy")
-    parser.add_argument("--backends", type=str, nargs="+", choices=["mlir", "tvm", "xdsl", "jir"], default=["mlir"], help="backends to use")
+    parser.add_argument("--backends", type=str, nargs="+", choices=["mlir", "tvm", "jir"], default=["mlir"], help="backends to use")
     parser.add_argument("--data", type=str, help="data CSV file for input to data search")
     parser.add_argument("--dims", nargs="+", type=int, help="dimensions, default to operators's default")
     parser.add_argument("--huge-pages", action=argparse.BooleanOptionalAction, default=True, help="alloc at huge page boundaries")

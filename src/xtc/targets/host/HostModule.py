@@ -1,7 +1,11 @@
-from typing import Any
+from typing import Any, cast
 from typing_extensions import override
 
 import xtc.itf as itf
+from xtc.itf.graph import Graph
+from xtc.graphs.xtc.graph import XTCGraph
+from xtc.graphs.xtc.data import XTCTensor
+from xtc.graphs.xtc.expr import XTCTensorExpr
 
 from .HostEvaluator import HostExecutor, HostEvaluator
 
@@ -18,6 +22,7 @@ class HostModule(itf.comp.Module):
             payload_name: str,
             file_name: str,
             file_type: str,
+            graph: Graph|None = None,
             **kwargs: Any,
     ) -> None:
         self._name = name
@@ -30,6 +35,52 @@ class HostModule(itf.comp.Module):
         self._np_inputs_spec = kwargs.get("np_inputs_spec")
         self._np_outputs_spec = kwargs.get("np_outputs_spec")
         self._reference_impl = kwargs.get("reference_impl")
+        self._graph = graph
+        if self._graph is not None:
+            self._np_inputs_spec = self._graph_np_inputs_spec
+            self._np_outputs_spec = self._graph_np_outputs_spec
+            self._reference_impl = self._graph_reference_impl
+
+    def _graph_np_inputs_spec(self) -> list[dict[str, Any]]:
+        assert isinstance(self._graph, XTCGraph)
+        assert all([
+            isinstance(node._expr, XTCTensorExpr)
+            and node._expr.type.is_constant()
+            for node in self._graph.inputs_nodes
+        ]), f"graph inputs are not tensors"
+        inputs_types = [
+            cast(XTCTensorExpr, node._expr).type
+            for node in self._graph.inputs_nodes
+        ]
+        return [
+            {
+                "shape": type.constant_shape,
+                "dtype": type.constant_dtype,
+            } for type in inputs_types
+        ]
+
+    def _graph_np_outputs_spec(self) -> list[dict[str, Any]]:
+        assert isinstance(self._graph, XTCGraph)
+        assert all([
+            node._outputs_types is not None
+            for node in self._graph.outputs_nodes
+        ]), f"graph types were not forwarded"
+        return [
+            {
+                "shape": type.constant_shape,
+                "dtype": type.constant_dtype,
+            } for type in [
+                cast(list, node._outputs_types)[0]
+                for node in self._graph.outputs_nodes
+            ]
+        ]
+
+    def _graph_reference_impl(self, *args: Any) -> None:
+        assert self._graph is not None
+        inputs = [XTCTensor(inp) for inp in args[:len(self._graph.inputs)]]
+        outputs = self._graph.forward(inputs)
+        for idx, out in enumerate(args[len(self._graph.inputs):]):
+            out[:] = outputs[idx].numpy()
 
     @property
     @override
