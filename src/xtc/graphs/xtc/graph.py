@@ -49,10 +49,12 @@ class XTCGraph(Graph):
         return [node.uid for node in self._outputs]
 
     @property
+    @override
     def inputs_nodes(self) -> Sequence["XTCNode"]:
         return self._inputs
 
     @property
+    @override
     def outputs_nodes(self) -> Sequence["XTCNode"]:
         return self._outputs
 
