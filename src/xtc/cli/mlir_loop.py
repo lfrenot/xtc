@@ -2,133 +2,193 @@
 
 import argparse
 from pathlib import Path
-from xdsl.dialects import (
-    func,
-    builtin
-)
-from xdsl.ir import (
-    Operation,
-)
+from xdsl.dialects import func, builtin
+from xdsl.ir import Operation
 
 from xtc.utils.xdsl_aux import parse_xdsl_module
 from xtc.backends.mlir.MlirNodeBackend import MlirNodeBackend
 from xtc.backends.mlir.MlirGraphBackend import MlirGraphBackend
 
 
-def remove_attr(o: Operation, attr_name: str):
-    if attr_name in o.attributes:
-        del o.attributes[attr_name]
+def main():
+    args = parse_args()
 
-def select_xdsl_payload(module: builtin.ModuleOp) -> func.FuncOp:
-    myfunc = None
-    for o in module.walk():
-        if isinstance(o,func.FuncOp):
-            myfunc = o
-            break
-    assert(myfunc)
-    return myfunc
+    with open(args.filename, "r") as f:
+        source = f.read()
 
-def operations_to_schedule(myfunc: func.FuncOp) -> list[Operation]:
-    annotated_operations = []
-    for o in myfunc.walk():
-        for attr_name in o.attributes:
-            if "loop." in attr_name:
-                annotated_operations.append(o)
-                break
-    return annotated_operations
+    module = parse_xdsl_module(source)
+    myfunc = get_unique_function(module)
+    ops_to_schedule = get_annotated_operations(myfunc)
 
-def extract_string_list_from_attr(o: Operation, attr_name: str) -> list[str]:
-    extracted_list = []
-    if attr_name in o.attributes:
-        raw_list = o.attributes[attr_name]
-        assert isinstance(raw_list, builtin.ArrayAttr)
-        for d in raw_list.data:
-            assert isinstance(d,builtin.StringAttr)
-            extracted_list.append(d.data)
-    return extracted_list
+    # Build the transform script
+    schedulers = []
+    for idx, op in enumerate(ops_to_schedule):
+        node_name = f"v{idx}"
+        sched = parse_scheduler(
+            op,
+            node_name,
+            always_vectorize=args.always_vectorize,
+            concluding_passes=args.concluding_passes,
+            no_alias=args.no_alias,
+        )
+        schedulers.append(sched)
 
-def extract_string_int_dict_from_attr(o: Operation, attr_name: str) -> dict[str,int]:
-    extracted_dict = {}
-    if attr_name in o.attributes:
-        raw_dict = o.attributes[attr_name]
-        assert isinstance(raw_dict, builtin.DictionaryAttr)
-        for string, integer in raw_dict.data.items():
-            assert isinstance(string,str) and  isinstance(integer,builtin.IntegerAttr)
-            extracted_dict[string] = integer.value.data
-    return extracted_dict
+    graph_backend = MlirGraphBackend(
+        always_vectorize=args.always_vectorize,
+        xdsl_func=myfunc,
+        nodes=[sched.backend for sched in schedulers],
+        concluding_passes=args.concluding_passes,
+        no_alias=args.no_alias,
+    )
+    graph_scheduler = graph_backend.get_scheduler(nodes_schedulers=schedulers)
+    final_schedule = graph_scheduler.schedule()
 
-def schedule_operation(
-    o: Operation,
+    dump_file = Path(args.filename).stem
+    print_source = args.print_source_ir or not any(
+        [
+            args.evaluate,
+            args.print_transformed_ir,
+            args.print_lowered_ir,
+            args.print_assembly,
+        ]
+    )
+
+    compiler_args = {
+        "mlir_install_dir": args.llvm_dir,
+        "to_disassemble": graph_backend.payload_name,
+        "print_source_ir": print_source,
+        "print_transformed_ir": args.print_transformed_ir,
+        "print_lowered_ir": args.print_lowered_ir,
+        "print_assembly": args.print_assembly,
+        "visualize_jumps": not args.hide_jumps,
+        "color": args.color,
+        "debug": args.debug,
+        "dump_file": dump_file,
+        "arch": args.arch,
+        "cpu": args.cpu,
+        "vectors_size": args.vectors_size,
+    }
+
+    if args.evaluate:
+        compiler_args["shared_lib"] = True
+
+    compiler = graph_backend.get_compiler(**compiler_args)
+    module = compiler.compile(final_schedule)
+
+    if args.evaluate:
+        evaluator = module.get_evaluator(init_zero=args.init_zero, min_repeat_ms=100)
+        res, code, err = evaluator.evaluate()
+        if code != 0:
+            raise RuntimeError(f"Evaluation failed: {err}")
+        print(min(res))
+
+
+def parse_scheduler(
+    op: Operation,
     node_name: str,
     always_vectorize: bool,
     concluding_passes: list[str],
-    no_alias: bool
+    no_alias: bool,
 ):
-    parsed_id = None
-    for attr_name in o.attributes:
-        if attr_name.startswith('__'):
-            assert parsed_id is None
-            parsed_id = attr_name
-
-    # Parse the initial specification
-    assert "loop.dims" in o.attributes
-    dims = extract_string_list_from_attr(o,"loop.dims")
-    assert dims
-    remove_attr(o,"loop.dims")
-    loop_stamps = extract_string_list_from_attr(o,"loop.add_attributes")
+    # ID
+    parsed_id = next((k for k in op.attributes if k.startswith("__")), None)
+    # Dims
+    dims = get_string_list_attribute(op, "loop.dims")
+    if not dims:
+        raise ValueError("Missing loop.dims attribute")
+    remove_attribute(op, "loop.dims")
+    # Additional attributes
+    loop_stamps = get_string_list_attribute(op, "loop.add_attributes")
 
     impl = MlirNodeBackend(
-        source_op = o,
-        dims = dims,
-        always_vectorize = always_vectorize,
-        payload_name = node_name,
-        concluding_passes = concluding_passes,
-        loop_stamps = loop_stamps,
-        no_alias = no_alias,
-        id = parsed_id
+        source_op=op,
+        dims=dims,
+        always_vectorize=always_vectorize,
+        payload_name=node_name,
+        concluding_passes=concluding_passes,
+        loop_stamps=loop_stamps,
+        no_alias=no_alias,
+        id=parsed_id,
     )
 
     sched = impl.get_scheduler()
 
-    # Parse and process the tiling declarations
-    if "loop.tiles" in o.attributes:
-        assert isinstance(o.attributes["loop.tiles"], builtin.DictionaryAttr)
-        toplevel_dict = o.attributes["loop.tiles"]
-        for dim_name, tiles_dict in toplevel_dict.data.items():
-            assert isinstance(tiles_dict, builtin.DictionaryAttr)
-            tiles_on_dim = {}
-            for tile_name,tile_size in tiles_dict.data.items():
-                assert isinstance(tile_name,str) and  isinstance(tile_size,builtin.IntegerAttr)
-                tiles_on_dim[tile_name] = tile_size.value.data
-            sched.tile(dim_name,tiles_on_dim)
-        remove_attr(o,"loop.tiles")
-    
-    # Parse the scheduling attributes
-    interchange = extract_string_list_from_attr(o,"loop.interchange")
-    vectorize = extract_string_list_from_attr(o,"loop.vectorize")
-    parallelize = extract_string_list_from_attr(o,"loop.parallelize")
-    unroll = extract_string_int_dict_from_attr(o,"loop.unroll")
-    remove_attr(o,"loop.interchange")
-    remove_attr(o,"loop.vectorize")
-    remove_attr(o,"loop.parallelize")
-    remove_attr(o,"loop.unroll")
+    # Tiling
+    tile_attr = op.attributes.get("loop.tiles")
+    if tile_attr:
+        assert isinstance(tile_attr, builtin.DictionaryAttr)
+        for dim, tile_dict in tile_attr.data.items():
+            assert isinstance(tile_dict, builtin.DictionaryAttr)
+            sched.tile(
+                dim,
+                {
+                    k: v.value.data
+                    for k, v in tile_dict.data.items()
+                    if isinstance(k, str) and isinstance(v, builtin.IntegerAttr)
+                },
+            )
+        remove_attribute(op, "loop.tiles")
 
     # Feed the scheduler
-    if interchange:
-        sched.interchange(interchange)
-    sched.vectorize(vectorize)
-    sched.parallelize(parallelize)
-    sched.unroll(unroll)
+    if "loop.interchange" in op.attributes:
+        sched.interchange(get_string_list_attribute(op, "loop.interchange"))
+    sched.vectorize(get_string_list_attribute(op, "loop.vectorize"))
+    sched.parallelize(get_string_list_attribute(op, "loop.parallelize"))
+    sched.unroll(get_string_int_dict_attribute(op, "loop.unroll"))
+
+    for a in ["interchange", "vectorize", "parallelize", "unroll"]:
+        remove_attribute(op, f"loop.{a}")
 
     return sched
 
-def main():
-    parser = argparse.ArgumentParser(description='Blabla.')
+
+def remove_attribute(operation: Operation, attr_name: str):
+    operation.attributes.pop(attr_name, None)
+
+
+def get_unique_function(module: builtin.ModuleOp) -> func.FuncOp:
+    myfunc = None
+    for o in module.walk():
+        if isinstance(o, func.FuncOp):
+            assert myfunc is None
+            myfunc = o
+    assert myfunc
+    return myfunc
+
+
+def get_annotated_operations(myfunc: func.FuncOp) -> list[Operation]:
+    return [
+        op for op in myfunc.walk() if any("loop." in attr for attr in op.attributes)
+    ]
+
+
+def get_string_list_attribute(op: Operation, attr_name: str) -> list[str]:
+    attr = op.attributes.get(attr_name)
+    if not attr:
+        return []
+    assert isinstance(attr, builtin.ArrayAttr)
+    return [elem.data for elem in attr.data if isinstance(elem, builtin.StringAttr)]
+
+
+def get_string_int_dict_attribute(op: Operation, attr_name: str) -> dict[str, int]:
+    attr = op.attributes.get(attr_name)
+    if not attr:
+        return {}
+    assert isinstance(attr, builtin.DictionaryAttr)
+    return {
+        key: val.value.data
+        for key, val in attr.data.items()
+        if isinstance(key, str) and isinstance(val, builtin.IntegerAttr)
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Blabla.")
     parser.add_argument(
-        'filename',
-        metavar='F',
+        "filename",
+        metavar="F",
         type=str,
-        help='The source file.',
+        help="The source file.",
     )
     parser.add_argument(
         "--llvm-dir",
@@ -149,16 +209,16 @@ def main():
     )
     parser.add_argument(
         "--concluding-passes",
-        metavar = "N",
+        metavar="N",
         type=str,
         nargs="*",
-        default = [],
-        help="Conclude the transform script with MLIR arbitrary passes."
+        default=[],
+        help="Conclude the transform script with MLIR arbitrary passes.",
     )
     parser.add_argument(
         "--always-vectorize",
         action="store_true",
-        help="Vectorize even if no vectorization dimension has been specified.."
+        help="Vectorize even if no vectorization dimension has been specified..",
     )
     parser.add_argument(
         "--vectors-size",
@@ -169,134 +229,55 @@ def main():
     parser.add_argument(
         "--print-source-ir",
         action="store_true",
-        default = False,
-        help="Print the source IR."
+        default=False,
+        help="Print the source IR.",
     )
     parser.add_argument(
-        "--no-alias",
-        action="store_true",
-        help="All tensors are considered alias-free."
+        "--no-alias", action="store_true", help="All tensors are considered alias-free."
     )
     parser.add_argument(
         "--print-transformed-ir",
         action="store_true",
-        default = False,
-        help="Print the IR after application of the transform dialect."
+        default=False,
+        help="Print the IR after application of the transform dialect.",
     )
     parser.add_argument(
         "--print-lowered-ir",
         action="store_true",
-        default = False,
-        help="Print the IR at LLVM level."
+        default=False,
+        help="Print the IR at LLVM level.",
     )
     parser.add_argument(
         "--print-assembly",
         action="store_true",
-        default = False,
-        help="Print the generated assembly."
+        default=False,
+        help="Print the generated assembly.",
     )
     parser.add_argument(
         "--evaluate",
         action="store_true",
-        default = False,
-        help="Evaluate the generated code."
+        default=False,
+        help="Evaluate the generated code.",
     )
     parser.add_argument(
         "--init-zero",
         action="store_true",
-        default = False,
-        help="Init the output with zeros before measurement."
+        default=False,
+        help="Init the output with zeros before measurement.",
     )
-    parser.add_argument(
-        "--color",
-        action="store_true",
-        help="Allow colors."
-    )
+    parser.add_argument("--color", action="store_true", help="Allow colors.")
     parser.add_argument(
         "--hide-jumps",
         action="store_true",
-        help="Hide assembly visualization of control flow."
+        help="Hide assembly visualization of control flow.",
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        default = False,
-        help="Print debug messages."
+        "--debug", action="store_true", default=False, help="Print debug messages."
     )
 
     args = parser.parse_args()
 
     if not Path(args.filename).exists():
         parser.error(f"{args.filename} does not exist.")
-    with open(args.filename, 'r') as f:
-        source = f.read()
-    module = parse_xdsl_module(source)
-    myfunc = select_xdsl_payload(module)
-    annotated_operations = operations_to_schedule(myfunc)
 
-    # Build the transform script
-    count = 0
-    nodes_scheds = []
-    for op in annotated_operations:
-        node_name = f"v{count}"
-        count += 1
-        sched = schedule_operation(
-            op,
-            node_name,
-            always_vectorize=args.always_vectorize,
-            concluding_passes=args.concluding_passes,
-            no_alias=args.no_alias
-        )
-        nodes_scheds.append(sched)
-
-    impl_graph = MlirGraphBackend(
-        always_vectorize=args.always_vectorize,
-        xdsl_func=myfunc,
-        nodes=[sched.backend for sched in nodes_scheds],
-        concluding_passes = args.concluding_passes,
-        no_alias = args.no_alias,
-    )
-    impl_scheduler = impl_graph.get_scheduler(
-        nodes_schedulers=nodes_scheds
-    )
-    impl_schedule = impl_scheduler.schedule()
-
-    print_source = args.print_source_ir or (
-        not args.evaluate and not (
-            args.print_transformed_ir
-            or args.print_lowered_ir
-            or args.print_assembly
-        )
-    )
-
-    dump_file = Path(args.filename).stem
-    compiler_args = dict(
-        mlir_install_dir=args.llvm_dir,
-        to_disassemble = impl_graph.payload_name,
-        print_source_ir=print_source,
-        print_transformed_ir=args.print_transformed_ir,
-        print_lowered_ir=args.print_lowered_ir,
-        print_assembly=args.print_assembly,
-        visualize_jumps= not args.hide_jumps,
-        color=args.color,
-        debug=args.debug,
-        dump_file=dump_file,
-        arch = args.arch,
-        cpu = args.cpu,
-        vectors_size = args.vectors_size,
-    )
-    if args.evaluate:
-        compiler_args.update(dict(shared_lib=True))
-
-    compiler = impl_graph.get_compiler(**compiler_args)
-    module = compiler.compile(impl_schedule)
-
-    if args.evaluate:
-        evaluator_args = dict(
-            init_zero=args.init_zero,
-            min_repeat_ms=100,
-        )
-        evaluator = module.get_evaluator(**evaluator_args)
-        res, code, err = evaluator.evaluate()
-        assert code == 0, f"evaluation error: {err}"
-        print(min(res))
+    return args
