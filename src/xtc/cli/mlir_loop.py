@@ -21,7 +21,7 @@ def main():
     ops_to_schedule = get_annotated_operations(myfunc)
 
     # Build the transform script
-    get_scheduler = parse_scheduler_legacy if args.old_syntax else None
+    get_scheduler = parse_scheduler_legacy if args.old_syntax else parse_scheduler
     assert get_scheduler
     schedulers = []
     for idx, op in enumerate(ops_to_schedule):
@@ -85,6 +85,25 @@ def main():
         print(min(res))
 
 
+def parse_scheduler(
+    op: Operation,
+    node_name: str,
+    always_vectorize: bool,
+    concluding_passes: list[str],
+    no_alias: bool,
+):
+    backend = parse_mlir_node_backend(
+        op = op,
+        node_name = node_name,
+        always_vectorize = always_vectorize,
+        concluding_passes = concluding_passes,
+        no_alias = no_alias
+    )
+
+    sched = backend.get_scheduler()
+
+    return sched
+
 def parse_scheduler_legacy(
     op: Operation,
     node_name: str,
@@ -92,28 +111,15 @@ def parse_scheduler_legacy(
     concluding_passes: list[str],
     no_alias: bool,
 ):
-    # ID
-    parsed_id = next((k for k in op.attributes if k.startswith("__")), None)
-    # Dims
-    dims = get_string_list_attribute(op, "loop.dims")
-    if not dims:
-        raise ValueError("Missing loop.dims attribute")
-    remove_attribute(op, "loop.dims")
-    # Additional attributes
-    loop_stamps = get_string_list_attribute(op, "loop.add_attributes")
-
-    impl = MlirNodeBackend(
-        source_op=op,
-        dims=dims,
-        always_vectorize=always_vectorize,
-        payload_name=node_name,
-        concluding_passes=concluding_passes,
-        loop_stamps=loop_stamps,
-        no_alias=no_alias,
-        id=parsed_id,
+    backend = parse_mlir_node_backend(
+        op = op,
+        node_name = node_name,
+        always_vectorize = always_vectorize,
+        concluding_passes = concluding_passes,
+        no_alias = no_alias
     )
 
-    sched = impl.get_scheduler()
+    sched = backend.get_scheduler()
 
     # Tiling
     tile_attr = op.attributes.get("loop.tiles")
@@ -143,6 +149,33 @@ def parse_scheduler_legacy(
 
     return sched
 
+def parse_mlir_node_backend(
+    op: Operation,
+    node_name: str,
+    always_vectorize: bool,
+    concluding_passes: list[str],
+    no_alias: bool,
+) -> MlirNodeBackend:
+    # ID
+    parsed_id = next((k for k in op.attributes if k.startswith("__")), None)
+    # Dims
+    dims = get_string_list_attribute(op, "loop.dims")
+    if not dims:
+        raise ValueError("Missing loop.dims attribute")
+    remove_attribute(op, "loop.dims")
+    # Additional attributes
+    loop_stamps = get_string_list_attribute(op, "loop.add_attributes")
+
+    return MlirNodeBackend(
+        source_op=op,
+        dims=dims,
+        always_vectorize=always_vectorize,
+        payload_name=node_name,
+        concluding_passes=concluding_passes,
+        loop_stamps=loop_stamps,
+        no_alias=no_alias,
+        id=parsed_id,
+    )
 
 def remove_attribute(operation: Operation, attr_name: str):
     operation.attributes.pop(attr_name, None)
