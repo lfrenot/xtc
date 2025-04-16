@@ -116,24 +116,53 @@ def parse_schedule(
         schedule: builtin.DictionaryAttr
 ):
     assert isinstance(scheduler.backend,MlirNodeBackend)
-    
+
+    sizes: dict[str, int | None] = {}
     interchange: list[str] = []
     tiles: dict[str,dict[str,int]] = {d: {} for d in scheduler.backend.dims}
-    for key,_ in schedule.data.items():
-        if '#' in key:
-            dim_name,tile_size = key.split('#')
+    unroll: dict[str,int] = {}
+    for declaration,val in schedule.data.items():
+        # Tiles
+        if '#' in declaration:
+            dim_name,tile_size = declaration.split('#')
+            loop_size = int(tile_size)
             tile_num = len(tiles[dim_name])
             loop_name = f"{dim_name}{tile_num}"
-            tiles[dim_name][loop_name] = int(tile_size)
-        elif key in scheduler.backend.dims:
-            loop_name = key
+            tiles[dim_name][loop_name] = loop_size
+        # Initial dimensions
+        elif declaration in scheduler.backend.dims:
+            loop_name = declaration
+            loop_size = None
         else:
             assert False
+        sizes[loop_name] = loop_size
+        # Build the interchange
         interchange.append(loop_name)
+        # Annotations
+        if isinstance(val,builtin.DictionaryAttr):
+            for annotation,param in val.data.items():
+                match annotation:
+                    case 'Unroll':
+                        if isinstance(param,builtin.UnitAttr):
+                            loop_size = sizes[loop_name]
+                            assert loop_size
+                            unroll_factor = loop_size
+                        elif isinstance(param,builtin.IntegerAttr):
+                            unroll_factor = param.value.data
+                        else:
+                            assert False
+                        unroll[loop_name] = unroll_factor
+                    case _:
+                        assert False
+        elif isinstance(val,builtin.UnitAttr):
+            pass
+        else:
+            assert False
         
     for dim in tiles:
         scheduler.tile(dim, tiles[dim])
     scheduler.interchange(interchange)
+    scheduler.unroll(unroll)
     return scheduler
 
 def parse_scheduler_legacy(
