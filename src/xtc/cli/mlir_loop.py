@@ -136,7 +136,7 @@ def parse_schedule(
             loop_name = declaration
             loop_size = None
         else:
-            assert False
+            raise Exception(f"Unknown declaration: {declaration}")
         sizes[loop_name] = loop_size
         # Build the interchange
         interchange.append(loop_name)
@@ -152,18 +152,18 @@ def parse_schedule(
                         elif isinstance(param,builtin.IntegerAttr):
                             unroll_factor = param.value.data
                         else:
-                            assert False
+                            raise Exception(f"Unknown unroll factor for {loop_name}")
                         unroll[loop_name] = unroll_factor
                     case "Vectorize":
                         vecto.append(loop_name)
                     case "Parallel":
                         parallel.append(loop_name)
                     case _:
-                        assert False
+                        raise Exception(f"Unknown annotation on {loop_name}: {annotation}")
         elif isinstance(val,builtin.UnitAttr):
             pass
         else:
-            assert False
+            raise Exception(f"The annotation on {loop_name} must be a dict")
         
     for dim in tiles:
         scheduler.tile(dim, tiles[dim])
