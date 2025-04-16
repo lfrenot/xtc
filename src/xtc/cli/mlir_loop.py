@@ -117,11 +117,22 @@ def parse_schedule(
 ):
     assert isinstance(scheduler.backend,MlirNodeBackend)
     
-    interchange = []
+    interchange: list[str] = []
+    tiles: dict[str,dict[str,int]] = {d: {} for d in scheduler.backend.dims}
     for key,_ in schedule.data.items():
-        if key in scheduler.backend.dims:
-            interchange.append(key)
-            
+        if '#' in key:
+            dim_name,tile_size = key.split('#')
+            tile_num = len(tiles[dim_name])
+            loop_name = f"{dim_name}{tile_num}"
+            tiles[dim_name][loop_name] = int(tile_size)
+        elif key in scheduler.backend.dims:
+            loop_name = key
+        else:
+            assert False
+        interchange.append(loop_name)
+        
+    for dim in tiles:
+        scheduler.tile(dim, tiles[dim])
     scheduler.interchange(interchange)
     return scheduler
 
