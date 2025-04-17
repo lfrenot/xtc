@@ -1,3 +1,5 @@
+![logo.png](logo.png)
+
 # Overview
 
 XTC is a domain specific dataflow graph compiler featuring operational DSL, scheduling DSL, multiple backends and autotuning.
