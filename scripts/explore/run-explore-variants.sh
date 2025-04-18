@@ -17,7 +17,7 @@ t="$TRIALS"
 for s in $STRATEGIES; do
     for b in $BACKENDS; do
         echo "Testing backend $b with tiling strategy $s for $t trials..."
-        (set -x && loop-explore --backends "$b" --trials "$t" --jobs 1 --strategy "$s" --output "$outdir/results.$b.$s.$t.csv")
+        (set -x && loop-explore --backends "$b" --trials "$t" --jobs 1 --strategy "$s" --output "$outdir/results.b$b.s$s.t$t.csv")
     done
 done
 
