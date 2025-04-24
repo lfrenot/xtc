@@ -61,6 +61,7 @@ class XTCOperator(Operator):
             inps_types: Sequence[XTCTensorType],
             outs_types: Sequence[XTCTensorType],
             dims: Mapping[str, int|str] = {},
+            kinds: Sequence[str] = (),
             inps_maps: Sequence[Sequence[str]] = (),
             outs_maps: Sequence[Sequence[str]] = (),
     ) -> XTCOperation:
@@ -73,6 +74,7 @@ class XTCOperator(Operator):
             inputs_types=tuple(inputs_types),
             outputs_types=tuple(outputs_types),
             dims=dims,
+            kinds=kinds,
             inps_maps=inps_maps,
             outs_maps=outs_maps,
         )
@@ -98,6 +100,7 @@ class XTCOperTensor(XTCOperator):
             dims={
                 "i": outputs_types[0].size
             },
+            kinds=("P",),
             inps_maps=(),
             outs_maps=(("i",)),
         )
@@ -122,6 +125,7 @@ class XTCOperMatmul(XTCOperator):
             inps_types,
             outs_types,
             dims={"i": i, "j": j, "k": k},
+            kinds=("P", "P", "R"),
             inps_maps=(
                 ("i", "k"),
                 ("k", "j"),
@@ -175,6 +179,7 @@ class XTCOperRelu(XTCOperator):
             inps_types,
             outs_types,
             dims={"i": i},
+            kinds=("P",),
             inps_maps=(("i",)),
             outs_maps=(("i",)),
         )
@@ -225,6 +230,7 @@ class XTCOperConv2D(XTCOperator):
             inps_types,
             outs_types,
             dims={"b": b, "h": oh, "w": ow, "f": f, "r": r, "s": s, "c": c},
+            kinds=("P", "P", "P", "P", "R", "R", "R"),
             inps_maps=(
                 ("b", f"h*{sh}+r", f"w*{sw}+s", "c"),
                 ("r", "s", "c", "f"),
@@ -324,6 +330,7 @@ class XTCOperPad2D(XTCOperator):
             inps_types,
             outs_types,
             dims={"b": b, "h": oh, "w": ow, "c": c},
+            kinds=("P", "P", "P", "P"),
             inps_maps=(
                 ("b", f"h-{self._padding[0]}", f"w-{self._padding[2]}", "c"),
             ),
@@ -391,6 +398,7 @@ class XTCOperReshape(XTCOperator):
             inps_types,
             outs_types,
             dims={"i": i},
+            kinds=("P",),
             inps_maps=(("i",)),
             outs_maps=(("i",)),
         )
