@@ -32,6 +32,7 @@ class BaseStrategy(Strategy):
             vec_size: int = 16,
             max_unroll: int = 256,
             threads: int = 1,
+            **kwargs: Any,
     ) -> None:
         self._graph = graph
         self._vec_size = vec_size
@@ -40,6 +41,13 @@ class BaseStrategy(Strategy):
         # Schedule output operation
         self._op = graph.outputs_nodes[0].operation
         self._stats: dict[str, int] = {}
+        self._parallelize = self._threads > 1
+        self._vectorize = self._vec_size > 1
+        self._unroll = self._max_unroll != 0
+        # TODO: should go into some machine description
+        self._arch_vreg_num = kwargs.get("vreg_num", 32)
+        self._arch_l1_size = kwargs.get("l1_size", 32*1024)
+        self._arch_l2_size = kwargs.get("l2_size", 1024*1024)
 
     @property
     @override
@@ -58,7 +66,7 @@ class BaseStrategy(Strategy):
 
     @override
     def default_schedule(self, opt_level: int = 2) -> VecSample:
-        return self._default_schedule()
+        return self._default_schedule(opt_level)
 
     @abstractmethod
     def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
@@ -69,7 +77,7 @@ class BaseStrategy(Strategy):
         ...
 
     @abstractmethod
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
+    def _default_schedule(self, opt_level: int) -> list[int]:
         ...
 
     @property
@@ -80,19 +88,8 @@ class BaseStrategy(Strategy):
         sizes = {a: v for a, v in self._op.dims.items() if isinstance(v, int)}
         return sizes
 
-    def _constant_p_sizes(self) -> Mapping[str, int]:
-        p_axes = self._op.dims_kind("P")
-        sizes = {a: v for a, v in self._op.dims.items() if isinstance(v, int) and a in p_axes}
-        return sizes
-
-    def _constant_r_sizes(self) -> Mapping[str, int]:
-        r_axes = self._op.dims_kind("R")
-        sizes = {a: v for a, v in self._op.dims.items() if isinstance(v, int) and a in r_axes}
-        return sizes
-
-    def _iter_product(self, args: Sequence[Sequence[Sequence[int]]], stat: str = "") -> Iterator[VecSample]:
-        if stat:
-            self._stats[stat] = 0
+    def _iter_product(self, args: Sequence[Sequence[Sequence[int]]], stat: str) -> Iterator[VecSample]:
+        self._stats[stat] = 0
         for x in itertools.product(*args):
             self._stats[stat] += 1
             yield list(itertools.chain(*x))
@@ -101,11 +98,13 @@ class BaseStrategy(Strategy):
         p_dims = list(self._op.dims_kind("P"))
         return p_dims[-1] if p_dims else None
 
-    def _filter_unroll(self, indexes: list[int], v_index: int|None, samples: Iterator[VecSample], stat: str = "") -> Iterator[VecSample]:
+    def _filter_unroll(self, indexes: list[int], v_index: int|None, samples: Iterator[VecSample], stat: str) -> Iterator[VecSample]:
         # Filter inner n_axes unrolled tiles if > max_unroll
         # assuming inner is vectorized
-        if stat:
-            self._stats[stat] = 0
+        self._stats[stat] = 0
+        if self._max_unroll < 0:
+            yield from samples
+            return
         for x in samples:
             inners = np.array(x)[indexes]
             inner_unroll = np.prod(inners)
@@ -113,206 +112,6 @@ class BaseStrategy(Strategy):
             if inner_unroll / vec_size <= self._max_unroll:
                 self._stats[stat] += 1
                 yield x
-
-    def _default_schedule_inner_level(self, opt_level: int = 2) -> Mapping[str, int]:
-        sizes = self._constant_sizes()
-        p_sizes = self._constant_p_sizes()
-        schedule = {axis: 1 for axis in sizes}
-        if opt_level >= 3:
-            vsize = self._vec_size
-            vaxis = self._vector_axis()
-            prev_axis = None
-            prev_axes = [axis for axis in p_sizes if axis != vaxis]
-            if len(prev_axes) >= 1:
-                prev_axis = prev_axes[-1]
-            if vaxis and p_sizes[vaxis] >= vsize and p_sizes[vaxis] % vsize == 0:
-                schedule[vaxis] = vsize
-            prev_unroll = 2  # TODO: IPC?
-            if prev_axis and p_sizes[prev_axis] >= prev_unroll and p_sizes[prev_axis] % prev_unroll == 0:
-                schedule[prev_axis] = prev_unroll
-        return schedule
-
-
-class Strategy_T1(BaseStrategy):
-    """ Strategy for 1-level tiling.
-
-    Given P-axes: p1,...pn and R-axes: r1,...rn.
-    We define the outer P-axis as O, and the remaining P-axis as P
-    and all R-axes as R.
-    The ordering of tiles is: ORPORP
-    The generated sample is the tile factors for the inner ORP
-    in the initial axes order.
-    All the inner ORP axes are unrolled.
-    The innermost axis of P is vectorized.
-    The O axis is parallelized.
-
-    For instance on a matmul(i, j, k):
-    - sample [2, 16, 3] we have a schedule:
-      - order: i, k, j, i1, k1, j1
-      - unroll(i1, k1, j1)
-      - vector(j1)
-      - parallel(i)
-
-    TODO:
-    - this may be generalized to N-level tiling
-    """
-    def __init__(self, graph: Graph, **kwargs: Any) -> None:
-        super().__init__(graph, **kwargs)
-
-    @override
-    def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
-        p_axes = self._op.dims_kind("P")
-        r_axes = self._op.dims_kind("R")
-        sizes = self._constant_sizes()
-        assert len(in_x) == len(sizes)
-        tilings = {}
-        N = 1 # Tile level for P
-        for axis, factors in [
-                (axis, in_x[idx*N:(idx+1)*N])
-                for idx, axis in enumerate(sizes)
-        ]:
-            tilings[axis] = {
-                f"{axis}{idx+1}": size
-                for idx, size in enumerate(factors_to_sizes(list(factors)))
-            }
-        axes_order = [*p_axes[:1], *r_axes, *p_axes[1:]]
-        for t in range(N):
-            axes_order.extend([
-                *[f"{axis}{t+1}" for axis in p_axes[:1]],
-                *[f"{axis}{t+1}" for axis in r_axes],
-                *[f"{axis}{t+1}" for axis in p_axes[1:]],
-            ])
-        parallel_axes = []
-        if self._threads > 1:
-            parallel_axes = axes_order[:1]
-        vector_axes = axes_order[-1:] if tilings else []
-        unroll_axes = {
-            axis: tilings[axis[:-1]][axis]
-            for axis in reversed(axes_order[-len(sizes):])
-        }
-        for axis, tiling in tilings.items():
-            sch.tile(axis, tiling)
-        sch.interchange(axes_order)
-        sch.parallelize(parallel_axes)
-        sch.vectorize(vector_axes)
-        sch.unroll(unroll_axes)
-
-    @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        sizes = self._constant_sizes()
-        N = 1 # Tile level for P
-        tiles = [
-            factors_enumeration(size, N)
-            for size in sizes.values()
-        ]
-        all_samples = self._iter_product(tiles, stat="all")
-        indexes = [a*N for a in range(len(sizes))]
-        vaxis = self._vector_axis()
-        v_index = list(sizes.keys()).index(vaxis)*N if vaxis else None
-        filtered_samples = self._filter_unroll(indexes, v_index, all_samples, stat="filtered")
-        return filtered_samples
-
-    @override
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
-        sizes = self._constant_sizes()
-        inner_sizes = self._default_schedule_inner_level(opt_level)
-        N = 1 # Tile level for P
-        schedule = [1] * (N - 1) * len(sizes)
-        schedule.extend([
-            inner_sizes.get(axis, 1)
-            for axis in sizes
-        ])
-        return schedule
-
-
-class Strategy_PRP(BaseStrategy):
-    """ Strategy for PRP tiling.
-
-    Given P-axes: p1,...pn and R-axes: r1,...rn.
-    We define all P-axes as P and all R-axes as R.
-    The ordering of tiles is: PRP
-    The generated sample is the tile factors for the inner P
-    in the initial axes order.
-    All the inner P axes are unrolled.
-    The innermost axis of P vectorized.
-    The outermost axis of P parallelized.
-
-    For instance on a matmul(i, j, k):
-    - sample [2, 16] we have a schedule:
-      - order: i, j, k, i1, j1
-      - unroll(i1, j1)
-      - vector(j1)
-      - parallel(i)
-
-    TODO:
-    - this may be generalized to N-level tiling
-    """
-    def __init__(self, graph: Graph, **kwargs: Any) -> None:
-        super().__init__(graph, **kwargs)
-
-    @override
-    def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
-        p_axes = self._op.dims_kind("P")
-        r_axes = self._op.dims_kind("R")
-        p_sizes = self._constant_p_sizes()
-        assert len(in_x) == len(p_sizes)
-        tilings = {}
-        N = 1 # Tile level for P
-        for axis, factors in [
-                (axis, in_x[idx*N:(idx+1)*N])
-                for idx, axis in enumerate(p_sizes)
-        ]:
-            tilings[axis] = {
-                f"{axis}{idx+1}": size
-                for idx, size in enumerate(factors_to_sizes(list(factors)))
-            }
-        axes_order = [
-            *p_axes,
-            *r_axes,
-            *[f"{axis}{n*N + 1}" for n in range(N) for axis in p_sizes],
-        ]
-        parallel_axes = []
-        if self._threads > 1:
-            parallel_axes = axes_order[:1]
-        vector_axes = axes_order[-1:] if tilings else []
-        unroll_axes = {
-            inner: size
-            for inner, size in
-            [list(sizes.items())[-1] for sizes in reversed(tilings.values())]
-        }
-        for axis, tiling in tilings.items():
-            sch.tile(axis, tiling)
-        sch.interchange(axes_order)
-        sch.parallelize(parallel_axes)
-        sch.vectorize(vector_axes)
-        sch.unroll(unroll_axes)
-
-    @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        p_sizes = self._constant_p_sizes()
-        N = 1 # Tile level for P
-        tiles = [
-            factors_enumeration(size, N)
-            for size in p_sizes.values()
-        ]
-        all_samples = self._iter_product(tiles, stat="all")
-        indexes = [a*N for a in range(len(p_sizes))]
-        vaxis = self._vector_axis()
-        v_index = list(p_sizes.keys()).index(vaxis)*N if vaxis else None
-        filtered_samples = self._filter_unroll(indexes, v_index, all_samples, stat="filtered")
-        return filtered_samples
-
-    @override
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
-        p_sizes = self._constant_p_sizes()
-        inner_sizes = self._default_schedule_inner_level(opt_level)
-        N = 1 # Tile level for P
-        schedule = [1] * (N - 1) * len(p_sizes)
-        schedule.extend([
-            inner_sizes.get(axis, 1)
-            for axis in p_sizes
-        ])
-        return schedule
 
 
 class Strategy_P1(BaseStrategy):
@@ -328,7 +127,8 @@ class Strategy_P1(BaseStrategy):
     the initial last parallel axis.
     Up to 2 outermost axis are parallelized if parallel.
 
-    TODO: The implementation is limited to matmult like ops.
+    TODO: The implementation is limited to matmult like ops,
+          refactor with PRTScheme with `U` item when implemented
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
@@ -375,11 +175,13 @@ class Strategy_P1(BaseStrategy):
         sch.unroll(unroll_axes)
 
     @override
-    def _filter_unroll(self, indexes: list[int], v_index: int|None, samples: Iterator[VecSample], stat: str = "") -> Iterator[VecSample]:
+    def _filter_unroll(self, indexes: list[int], v_index: int|None, samples: Iterator[VecSample], stat: str) -> Iterator[VecSample]:
         # Filter inner n_axes unrolled tiles if > max_unroll
         # assuming inner is vectorized
-        if stat:
-            self._stats[stat] = 0
+        self._stats[stat] = 0
+        if self._max_unroll < 0:
+            yield from samples
+            return
         for x in samples:
             inners = np.array(x)[indexes]
             inner_unroll = np.prod(inners)
@@ -410,7 +212,7 @@ class Strategy_P1(BaseStrategy):
         return filtered_samples
 
     @override
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
+    def _default_schedule(self, opt_level: int) -> list[int]:
         # TODO: ref above, only support matmult like
         assert len(self._constant_sizes()) == 3
         i, j, k =         i, j, k = self._constant_sizes().values()
@@ -434,7 +236,8 @@ class Strategy_P1v(Strategy_P1):
 
     Same as Strategy_P1, but space is constraint to vectorized inner axis.
 
-    TODO: The implementation is limited to matmult like ops.
+    TODO: The implementation is limited to matmult like ops,
+          refactor with PRTScheme with `U` item when implemented
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
@@ -451,249 +254,474 @@ class Strategy_P1v(Strategy_P1):
                 yield x
 
 
-class Strategy_PPRPRP(BaseStrategy):
-    """ Strategy for Ansor like tiling with.
+class BaseStrategyPRTScheme(BaseStrategy):
+    """ Base Strategy for PR... tiling sequences.
 
-    Given P-axes: p1,...,pn and R-axies: r1, ..., rn
-    We define all P-axes as P and all R-axes as R.
-    The ordering of tiles is: PPRPRP
-    The generated sample is the tile factors for each axes
-    in the initial axes order.
-    All the inner RP axes are unrolled.
-    The innermost axis of P vectorized.
-    The outermost axis of P parallelized.
+    Given P-axes: p1,...pn and R-axes: r1,...rn.
+    We define several tile reodering item as:
+    - `P`: all P-axes in order
+    - `R`: all R-axes in order
+    - `T`: all axes in order
+    - `U`: all axes in random order, TODO: not implemented yet
+    - `O`: first P-axis then R-axes, then remaining P-axis
 
-    Refer also to Strategy_PRP, a simplified version for examples.
+    We also define dditional items which can be mixed with tile items:
+    - `W`: add an output write buffer at this level
 
-    TODO: The implementation is limited to matmult like ops.
+    Then we can define scheme as a sequence of items, for instance:
+    - `PRP`: P-axes, R-axes then a for all P-axes
+    - `TT`: all axes, then a tile for all axes
+    - `ORP`: all axes in O order, then tile for all R-axes, then tile for all P-axes
+    - `PWRP`: P-axes, a write buffer, then R-axes then inner P-axes tiles
+
+    In addition by default:
+    - inner axis, if parallel is vectorized
+    - inner tile for all tiled axes are unrolled
+    - outer axis, if parallel is parallelized
+
+    For instance on a matmul(i, j, k) with scheme `OO`:
+    - axes order will be: `i, k, j, i1, k1, j1`
+    - axis j1 is vectorized
+    - axes j1, k1, i1 are unrolled
+    - axis i is parallelized
+
     """
-    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+    def __init__(self, graph: Graph, scheme: str, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
+        self._scheme = scheme
+        self._axes = list(self._op.dims)
+        self._sizes = self._constant_sizes()
+        self._p_axes = list(self._op.dims_kind("P"))
+        self._r_axes = list(self._op.dims_kind("R"))
+        self._order, self._tiles_levels, self._base_axis, self._item_map, self._w_axes = self._init_order_tiles()
+        self._tiles_idx = self._init_tiles_idx()
+        self._x_size = sum([level - 1 for level in self._tiles_levels.values()])
+        self._parallel = self._init_parallel()
+        self._unrolled = self._init_unrolled()
+        self._vectorized = self._init_vectorized()
+        assert len(self._vectorized) <= 1
 
-        # TODO: for now limited to 3 axes i, j, k (i.e. matmul)
-        # no need to be matmul specific as soon as
-        # we have axes names
-        # actually PPRPRP -> i j i1 j1 k i2 j2 k1 i3 j3
-        # where the input vector is: i1 i2 i3 j1 j2 j3 k1
-        assert tuple(self._op.dims) == ("i", "j", "k")
-        assert tuple(self._op.dims_kind("P")) == ("i", "j")
-        assert tuple(self._op.dims_kind("R")) == ("k",)
+    def _init_order_tiles(self) -> tuple[list[str], dict[str, int], dict[str, str], dict[int, list[str]], list[str]]:
+        base_axis = {}
+        item_map = {}
+        order = []
+        w_axes = []
+        levels = {axis: 0 for axis in self._axes}
+        prev_axis = ""
+        for item_idx, item in enumerate(self._scheme):
+            axis_lst: list[str] = []
+            if item == "P":
+                axis_lst = self._p_axes
+            elif item == "R":
+                axis_lst = self._r_axes
+            elif item == "T":
+                axis_lst = self._axes
+            elif item == "O":
+                # Item O is outer parallel first, reductions, remaining parallels
+                axis_lst = [*self._p_axes[:1], *self._r_axes, *self._p_axes[1:]]
+            else:
+                assert item == "W"
+                axis_lst = []
+                assert prev_axis
+                w_axes.append(prev_axis)
+            item_axes = []
+            for axis in axis_lst:
+                tiled_axis = f"{axis}" if levels[axis] == 0 else f"{axis}{levels[axis]}"
+                item_axes.append(tiled_axis)
+                levels[axis] += 1
+                base_axis[tiled_axis] = axis
+            order.extend(item_axes)
+            item_map[item_idx] = item_axes
+            prev_axis = item_axes[-1] if item_axes else ""
+        return order, levels, base_axis, item_map, w_axes
 
-    @override
-    def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        tiles_i = factors_to_sizes(list(in_x[0:3]))
-        tiles_j= factors_to_sizes(list(in_x[3:6]))
-        tiles_k = factors_to_sizes(list(in_x[6:7]))
-        tiles_i_dict = {f"i{i+1}": v for i, v in enumerate(tiles_i)}
-        tiles_j_dict = {f"j{i+1}": v for i, v in enumerate(tiles_j)}
-        tiles_k_dict = {f"k{i+1}": v for i, v in enumerate(tiles_k)}
-        axes_order = ["i", "j", "i1", "j1", "k", "i2", "j2", "k1", "i3", "j3"]
-        vector_axes = axes_order[-1:]
-        parallel_axes = []
-        if self._threads > 1:
-            parallel_axes = axes_order[:2]
-        unroll_axes = {"j3": tiles_j[-1], "i3": tiles_i[-1], "k1": tiles_k[-1]}
-        sch.tile("i", tiles_i_dict)
-        sch.tile("j", tiles_j_dict)
-        sch.tile("k", tiles_k_dict)
-        sch.interchange(axes_order)
-        sch.parallelize(parallel_axes)
-        sch.vectorize(vector_axes)
-        sch.unroll(unroll_axes)
+    def _init_tiles_idx(self) -> dict[str, int]:
+        tiles_idx = {}
+        idx = 0
+        for axis in self._axes:
+            levels = self._tiles_levels[axis]
+            assert levels >= 1, f"no tile level specified for axis: {axis}"
+            tiles_idx[axis] = idx
+            for level in range(levels-1):
+                tiled_axis = f"{axis}{level+1}"
+                tiles_idx[tiled_axis] = idx
+                idx += 1
+        return tiles_idx
+
+    def _init_unrolled(self) -> list[str]:
+        if not self._unroll:
+            return []
+        max_unroll_num = 0
+        if (self._scheme[-1:] == "T" or
+            self._scheme[-1:] == "O" or
+            self._scheme[-2:] == "PR" or
+            self._scheme[-2:] == "RP"):
+            max_unroll_num = len(self._axes)
+        elif self._scheme[-1:] == "P":
+            max_unroll_num = len(self._p_axes)
+        elif self._scheme[-1:] == "R":
+            max_unroll_num = len(self._r_axes)
+        unrolled = []
+        # Ensure that unrolled axes are only
+        # inner tiled axis (i.e. not base axis)
+        for idx, axis in enumerate(self._order[::-1]):
+            if idx >= max_unroll_num:
+                break
+            if axis == self._base_axis[axis]:
+                break
+            unrolled.append(axis)
+        return unrolled
+
+    def _init_vectorized(self) -> list[str]:
+        if not self._vectorize:
+            return []
+        max_vectorized = 1
+        vectorized = []
+        # Ensure that the vectorized axis is the
+        # inner axis, is tiled and is parallel
+        for idx, axis in enumerate(self._order[::-1]):
+            if idx >= max_vectorized:
+                break
+            if axis == self._base_axis[axis]:
+                break
+            if self._base_axis[axis] != self._vector_axis():
+                break
+            vectorized.append(axis)
+        return vectorized
+
+    def _init_parallel(self) -> list[str]:
+        if not self._parallelize:
+            return []
+        max_parallelized = 1
+        parallel = []
+        # Ensure that the parallel axes are the outer axes
+        # (i.e. not sub tiles) and are parallel
+        for idx, axis in enumerate(self._order):
+            if idx >= max_parallelized:
+                break
+            if self._base_axis[axis] != axis:
+                break
+            if self._base_axis[axis] not in self._p_axes:
+                break
+            parallel.append(axis)
+        return parallel
+
+    def _vector_index(self) -> int|None:
+        indexes = [
+            self._tiles_idx[axis]
+            for axis in self._vectorized
+        ]
+        return indexes[0] if indexes else None
+
+    def _unrolled_indexes(self) -> list[int]:
+        indexes = [
+            self._tiles_idx[axis]
+            for axis in self._unrolled
+        ]
+        return indexes
+
+    def _item_indexes(self, item_idx: int) -> list[int]:
+        indexes = [
+            self._tiles_idx[axis]
+            for axis in self._item_map[item_idx]
+        ]
+        return indexes
+
+    def _inner_items_indexes(self, item_idx: int) -> list[int]:
+        if item_idx < 0:
+            item_idx = len(self._scheme) + item_idx
+        indexes = []
+        for idx in range(item_idx, len(self._scheme)):
+            indexes.extend(self._item_indexes(idx))
+        return indexes
+
+    def _filter_vectorized(self, samples: Iterator[VecSample], stat: str) -> Iterator[VecSample]:
+        # Filter vectorized samples, i.e. vector tile >= VEC_SIZE
+        self._stats[stat] = 0
+        vaxis = self._vectorized[0] if self._vectorized else ""
+        vsize = self._vec_size
+        base_size = self._sizes[self._base_axis[vaxis]] if vaxis else 1
+        if not vaxis or base_size <= vsize:
+            yield from samples
+            return
+        vidx = self._tiles_idx[vaxis]
+        for x in samples:
+            if x[vidx] >= vsize:
+                self._stats[stat] += 1
+                yield x
+
+    def _filter_reg_num(self, samples: Iterator[VecSample], inner_items: int, stat: str) -> Iterator[VecSample]:
+        # Filter inner items <= VEC_SIZE * REG_NUM
+        self._stats[stat] = 0
+        indexes = self._inner_items_indexes(-inner_items)
+        max_vreg = self._arch_vreg_num
+        for x in samples:
+            elts = np.prod(np.array(x)[indexes])
+            if not elts <= self._vec_size * max_vreg:
+                continue
+            self._stats[stat] += 1
+            yield x
+
+    def _filter_l1_size(self, samples: Iterator[VecSample], inner_items: int, stat: str) -> Iterator[VecSample]:
+        # Filter inner items <= MAX_L1_ELTS
+        self._stats[stat] = 0
+        indexes = self._inner_items_indexes(-inner_items)
+        max_l1_elts = self._arch_l1_size/4 # where 4 is float size (TODO)
+        for x in samples:
+            elts = np.prod(np.array(x)[indexes])
+            if not elts <= max_l1_elts:
+                continue
+            self._stats[stat] += 1
+            yield x
+
+    def _filter_l2_size(self, samples: Iterator[VecSample], inner_items: int, stat: str) -> Iterator[VecSample]:
+        # Filter inner items <= MAX_L1_ELTS
+        self._stats[stat] = 0
+        indexes = self._inner_items_indexes(-inner_items)
+        max_l2_elts = self._arch_l2_size/4 # where 4 is float size (TODO)
+        for x in samples:
+            elts = np.prod(np.array(x)[indexes])
+            if not elts <= max_l2_elts:
+                continue
+            self._stats[stat] += 1
+            yield x
 
     @override
     def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        i, j, k = self._constant_sizes().values()
-        tiles_i = factors_enumeration(i, 3)
-        tiles_j = factors_enumeration(j, 3)
-        tiles_k = factors_enumeration(k, 1)
-        all_samples = self._iter_product(
-            [tiles_i, tiles_j, tiles_k],
-            stat="all"
-        )
-        v_index = 5 # index of j3
-        indexes = [2, 5, 6] # indexs of i3, j3, k1
+        tiles = [
+            factors_enumeration(self._sizes[axis], level-1)
+            for axis, level in self._tiles_levels.items()
+        ]
+        w_bools = [[[0], [1]]] * len(self._w_axes)
+        all_samples = self._iter_product(tiles + w_bools, stat="all")
+        indexes = self._unrolled_indexes()
+        v_index = self._vector_index()
         filtered_samples = self._filter_unroll(indexes, v_index, all_samples, stat="filtered")
         return filtered_samples
 
     @override
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        i, j, k = self._constant_sizes().values()
-        def sched_o2():
-            jtile = self._vec_size
-            itile = 2
-            ktile = 1
-            idiv = i >= itile and i % itile == 0
-            jdiv = j >= jtile and j % jtile == 0
-            kdiv = k >= ktile and k % ktile == 0
-            if idiv and jdiv and kdiv:
-                return [1, 1, itile, 1, 1, jtile, ktile]
-            return None
-        def sched_o3():
-            jtile = self._vec_size * 4
-            itile = 4
-            ktiles = factors_enumeration(k, 1)
-            ktile = [x[0] for x in ktiles if x[0] <= 16][-1]
-            idiv = i >= itile and i % itile == 0
-            jdiv = j >= jtile and j % jtile == 0
-            kdiv = k >= ktile and k % ktile == 0
-            if idiv and jdiv and kdiv:
-                return [i//itile, 1, itile, 1, j//jtile, jtile, ktile]
-            return None
-        schedule = [1, 1, 1, 1, 1, 1, 1]
-        if opt_level >= 2:
-            o2 = sched_o2()
-            if o2: schedule = o2
-        if opt_level >= 3:
-            o3 = sched_o3()
-            if o3: schedule = o3
+    def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
+        tilings = {}
+        for axis in self._axes:
+            idx = self._tiles_idx[axis]
+            nfactors = self._tiles_levels[axis] - 1
+            factors = in_x[idx:idx+nfactors]
+            sizes = factors_to_sizes(factors)
+            tilings[axis] = {
+                f"{axis}{idx+1}": size for idx, size in enumerate(sizes)
+            }
+        axes_order = self._order
+        parallel_axes = self._parallel
+        vector_axes = self._vectorized
+        unroll_axes = {
+            axis: in_x[self._tiles_idx[axis]]
+            for axis in self._unrolled
+        }
+        for axis, tiling in tilings.items():
+            sch.tile(axis, tiling)
+        sch.interchange(axes_order)
+        sch.parallelize(parallel_axes)
+        sch.vectorize(vector_axes)
+        sch.unroll(unroll_axes)
+        for w_axis in self._w_axes:
+            sch.buffer_at(w_axis, "write")
+
+    def _check_divisibility_from_tiles(self, tiles: dict[str, int]) -> bool:
+        divisible = all([
+            (
+                tile > 0 and
+                self._sizes[self._base_axis[axis]] >= tile and
+                self._sizes[self._base_axis[axis]] % tile == 0
+            )
+            for axis, tile in tiles.items()
+        ])
+        return divisible
+
+    def _generate_from_tiles(self, tiles: dict[str, int]) -> list[int]|None:
+        schedule = [1] * self._x_size
+        for axis, tile in tiles.items():
+            schedule[self._tiles_idx[axis]] = tile
         return schedule
+
+    def _get_max_axis_factor(self, axis: str, max_factor: int) -> int:
+        base_size = self._sizes[self._base_axis[axis]]
+        factors = factors_enumeration(base_size, 1)
+        factor = [x[0] for x in factors if x[0] <= max_factor][-1]
+        return factor
+
+    @override
+    def _default_schedule(self, opt_level: int) -> list[int]:
+        def base_sched(v_unroll: int, p_unroll: int, r_unroll: int):
+            # get last vectorized (vectorize order is reversed)
+            vaxes = self._vectorized[:1]
+            # get last 2 parallel (unroll order is reversed)
+            paxes = [
+                axis for axis in self._unrolled
+                if self._base_axis[axis] in self._p_axes
+            ][:2]
+            # get last reduction (unroll order is reversed)
+            raxes = [
+                axis for axis in self._unrolled
+                if self._base_axis[axis] in self._r_axes
+            ][:1]
+            vtiles = {
+                axis: self._get_max_axis_factor(axis, max(p_unroll, v_unroll))
+                for axis in vaxes
+            }
+            ptiles = {
+                axis: self._get_max_axis_factor(axis, p_unroll)
+                for axis in paxes
+                if axis not in vtiles
+            }
+            rtiles = {
+                axis: self._get_max_axis_factor(axis, r_unroll)
+                for axis in raxes
+            }
+            tiles = {**ptiles, **rtiles, **vtiles}
+            if not self._check_divisibility_from_tiles(tiles):
+                return None
+            schedule = self._generate_from_tiles(tiles)
+            return schedule
+        def sched_o2():
+            return base_sched(self._vec_size, 2, 1)
+        def sched_o3():
+            return base_sched(self._vec_size, 4, 16)
+        tiles_sched = [1] * self._x_size
+        w_sched = [0] * len(self._w_axes)
+        if opt_level >= 2:
+            if len(w_sched) > 0:
+                w_sched[-1] = 1
+            o2 = sched_o2()
+            if o2: tiles_sched = o2
+        if opt_level >= 3:
+            w_sched = [1] * len(self._w_axes)
+            o3 = sched_o3()
+            if o3: tiles_sched = o3
+        return tiles_sched + w_sched
+
+
+class Strategy_OO(BaseStrategyPRTScheme):
+    """ Strategy for 1-level tiling in O order.
+
+    For instance on a matmul(i, j, k):
+    - tiles order: i, k, j, i1, k1, j1
+
+    """
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, scheme="OO", **kwargs)
+
+
+class Strategy_PRP(BaseStrategyPRTScheme):
+    """ Strategy for PRP tiling.
+
+    For instance on a matmul(i, j, k):
+    - tiles order: i, j, k, i1, j1
+
+    """
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, scheme="PRP", **kwargs)
+
+
+class Strategy_PPRPRP(BaseStrategyPRTScheme):
+    """ Strategy for Ansor like tiling with.
+
+    For instance on a matmul(i, j, k):
+    - tiles order: i, j, i1, j1, k, i2, j2, k1, i3, j3
+
+    """
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, scheme="PPRPRP", **kwargs)
 
 
 class Strategy_PPRPRPv(Strategy_PPRPRP):
-    """ Strategy for Ansor like tiling with space vectorization.
+    """ Strategy for Ansor like tiling with vectorization.
 
-    Same as Strategy_PPRPRP, but with an additional constraint for the
-    space to have the inner axis vectorized.
+    For instance on a matmul(i, j, k):
+    - tiles order: i, j, i1, j1, k, i2, j2, k1, i3, j3
+    - filter on: j3 >= VEC_SIZE
 
-    TODO: The implementation is limited to matmult like ops.
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
 
     @override
     def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
         samples = super()._exhaustive()
-        # Keep only vectorized dims, i.e. j3 >= VEC_SIZE
-        vidx = 5 # index of j3
-        for x in samples:
-            if x[vidx] >= self._vec_size:
-                yield x
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        return samples
+
 
 class Strategy_PPRPRPvr(Strategy_PPRPRP):
     """ Strategy for Ansor like tiling with space constraints.
 
-    Same as Strategy_PPRPRP, but with an additional constraints on the
-    space:
-    - vectorized inner axis
-    - inner P vector size lower than machine vector registers
-    - inner RP bytes size lower than machine L1
-    - inner PRP bytes size lower than machine L2
+    For instance on a matmul(i, j, k):
+    - tiles order: i, j, i1, j1, k, i2, j2, k1, i3, j3
+    - filter on:
+      - j3 >= VEC_SIZE
+      - inner P (i3*j3) vector size lower than number of vector registers
+      - inner RP (k1*i3*j3) bytes size lower than machine L1
+      - inner PRP (i2*j2*k1*i3*j3) bytes size lower than machine L2
 
-    TODO: The implementation is limited to matmult like ops.
     """
-
-    # TODO: should go into some machine description
-    _MAX_VREG = 32
-    _MAX_L1_ELTS = 32*1024/4 # where 4 is float size (TODO)
-    _MAX_L2_ELTS = 1024*1024/4 # where 4 is float size (TODO)
 
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
 
+
     @override
     def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
         samples = super()._exhaustive()
-        for x in samples:
-            # Keep only vectorized dims, i.e. j3 >= VEC_SIZE
-            if not x[5] >= self._vec_size:
-                continue
-            # Keep only inner i*j <= VEC_SIZE * MAX_REG
-            if not x[2]*x[5] <= self._vec_size*self._MAX_VREG:
-                continue
-            # Keep only inner k*i*j <= MAX_L1_ELTS
-            if not x[2]*x[5]*x[6] <= self._MAX_L1_ELTS:
-                continue
-            # Keep only inner 2 k*i*j <= MAX_L2_ELTS
-            if not x[1]*x[2]*x[4]*x[5]*x[6] <= self._MAX_L2_ELTS:
-                continue
-            yield x
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        samples = self._filter_reg_num(samples, 1, "filtered_reg")
+        samples = self._filter_l1_size(samples, 2, "filtered_l1")
+        samples = self._filter_l2_size(samples, 3, "filtered_l2")
+        return samples
 
 
-class Strategy_PPWRPRP(Strategy_PPRPRP):
+class Strategy_PPWRPRP(BaseStrategyPRTScheme):
     """ Strategy for Ansor like tiling and write buffer.
 
     Same as Strategy_PPRPRP, but with an additional write buffer.
     The scheduler is PPWPRPR where W is the location of the
     allocated write buffer in the tiling.
-
-    TODO: The implementation is limited to matmult like ops.
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
-        super().__init__(graph, **kwargs)
-
-    @override
-    def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
-        if in_x[-1] != 0:
-            sch.buffer_at("j1", "write")
-
-    @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        samples = super()._exhaustive()
-        for x in samples:
-            yield x + [0]
-            yield x + [1]
-
-    @override
-    def _default_schedule(self, opt_level: int = 2) -> list[int]:
-        schedule = super()._default_schedule(opt_level)
-        wc = 1 if opt_level >= 2 else 0
-        return schedule + [wc]
+        super().__init__(graph, scheme="PPWRPRP", **kwargs)
 
 
-class Strategy_PPWRPRPv(Strategy_PPWRPRP, Strategy_PPRPRPv):
+class Strategy_PPWRPRPv(Strategy_PPWRPRP):
     """ Strategy for Ansor like tiling and write buffer with space vectorization.
 
     Same as Strategy_PPWRPRP, but with an additional constraint for the
     space to have the inner axis vectorized as in strategy PPRPRPV.
-
-    TODO: The implementation is limited to matmult like ops.
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
 
     @override
     def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        samples = Strategy_PPRPRPv.exhaustive(self)
-        for x in samples:
-            yield x + [0]
-            yield x + [1]
+        samples = super()._exhaustive()
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        return samples
 
 
-class Strategy_PPWRPRPvr(Strategy_PPWRPRP, Strategy_PPRPRPvr):
+class Strategy_PPWRPRPvr(Strategy_PPWRPRP):
     """ Strategy for Ansor like tiling and write buffer with space constraints.
 
     Same as Strategy_PPWRPRP, but with additional constraints for the
     space as in strategy PPRPRPvr.
-
-    TODO: The implementation is limited to matmult like ops.
     """
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
         super().__init__(graph, **kwargs)
 
     @override
     def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        samples = Strategy_PPRPRPvr.exhaustive(self)
-        for x in samples:
-            yield x + [0]
-            yield x + [1]
-
+        samples = super()._exhaustive()
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        samples = self._filter_reg_num(samples, 1, "filtered_reg")
+        samples = self._filter_l1_size(samples, 2, "filtered_l1")
+        samples = self._filter_l2_size(samples, 3, "filtered_l2")
+        return samples
 
 
 class Strategies():
@@ -708,9 +736,9 @@ class Strategies():
         return cls._map[name]
 
     _map = {
-        "tile_t1": Strategy_T1,
         "tile_p1": Strategy_P1,
         "tile_p1_v": Strategy_P1v,
+        "tile_oo": Strategy_OO,
         "tile_prp": Strategy_PRP,
         "tile_pprprp": Strategy_PPRPRP,
         "tile_pprprp_v": Strategy_PPRPRPv,

@@ -549,7 +549,7 @@ OPERATORS = {
                 "implementer": jir_matmul_impl,
             },
         },
-        "default_strategy": "tile_t1",
+        "default_strategy": "tile_oo",
     },
     "relu": {
         "dims": ["i"],
@@ -564,23 +564,23 @@ OPERATORS = {
                 "implementer": tvm_relu_impl,
             },
         },
-        "default_strategy": "tile_t1",
+        "default_strategy": "tile_oo",
     },
 }
 
 STRATEGIES_ALIASES = {
-    # legacy: same as t1 for 1 dimensional kernels
-    "tile1d": "tile_t1",
-    # legacy: same as t1 for matmul kernel
-    "tile3d": "tile_t1",
+    # legacy: same as OO for 1 dimensional kernels
+    "tile1d": "tile_oo",
+    # legacy: same as OO for matmul kernel
+    "tile3d": "tile_oo",
     # legacy: tile4d* for matmul is same as tile_p1*
     "tile4d": "tile_p1",
     "tile4dv": "tile_p1_v",
-    # legacy: tile7d* for matmul is same as tile_pprprp*
+    # legacy: tile7d* for matmul is same as PPRPRP*
     "tile7d": "tile_pprprp",
     "tile7dv": "tile_pprprp_v",
     "tile7dvr": "tile_pprprp_vr",
-    # legacy: tile8d* for matmul is same as tile_ppwrprp*
+    # legacy: tile8d* for matmul is same as PPRRPRP*
     "tile8d": "tile_ppwrprp",
     "tile8dv": "tile_ppwrprp_v",
     "tile8dvr": "tile_ppwrprp_vr",
