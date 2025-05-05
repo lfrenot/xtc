@@ -43,16 +43,28 @@ test-xtc:
     - pip list
     - pyright
     - mypy
-    - lit -a tests/filecheck
-    - pytest tests/unit
-    - pytest tests/mlir
-    - pytest tests/tvm
-    - pytest tests/jir
+    - COV=scripts/coverage/coverage_run.sh
+    - $COV lit -a tests/filecheck
+    - $COV pytest tests/unit
+    - $COV pytest tests/mlir
+    - $COV pytest tests/tvm
+    - $COV pytest tests/jir
+    - coverage combine
+    - coverage report
+    - mkdir -p artifacts/coverage
+    - coverage xml -o artifacts/coverage/coverage.xml
+    - coverage report --format=markdown >artifacts/coverage/coverage.md
+    - coverage html -d artifacts/coverage/html
     - scripts/explore/run-explore-variants.sh artifacts/explore/
     - env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore/
+  coverage:  '/TOTAL.*? (100(?:\.0+)?\%\|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
     paths:
       - artifacts/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: artifacts/coverage/coverage.xml
 
 pages:
   stage: deploy
