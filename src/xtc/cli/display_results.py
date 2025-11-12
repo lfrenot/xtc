@@ -64,7 +64,16 @@ def read_inputs(args: ns):
 
 
 def draw_pmf(ax: Any, Y: Sequence[float], bins: int = 20, label: str | None = None):
-    ax.hist(Y, bins=bins, label=label, histtype="step", alpha=0.8)
+    # Normalize with weights s.t. bin height is a fraction of count
+    count = len(Y)
+    ax.hist(
+        Y,
+        bins=bins,
+        weights=np.ones(count) / count,
+        histtype="step",
+        alpha=0.8,
+        label=label,
+    )
 
 
 def draw_cdf(ax: Any, Y: Sequence[float], bins: int = 20, label: str | None = None):
@@ -95,6 +104,18 @@ def draw_cor(
         ax.set_xlabel(ref_label)
 
 
+def draw_rcdf(ax, Y, bins=20, label=None):
+    ax.hist(
+        Y,
+        bins=bins,
+        density=True,
+        cumulative=-1,
+        label=label,
+        histtype="step",
+        alpha=0.8,
+    )
+
+
 def save_fig(fname: str | Path):
     fig = plt.gcf()
     dpi = fig.dpi
@@ -114,7 +135,7 @@ def display_results(results: Sequence[ns], args: ns):
         axs = [axs]
     idx = 0
     axes = ns()
-    for type in ["pmf", "cdf", "cor"]:
+    for type in ["pmf", "cdf", "cor", "rcdf"]:
         if not getattr(args, type):
             continue
         setattr(axes, type, axs[idx])
@@ -140,6 +161,12 @@ def display_results(results: Sequence[ns], args: ns):
             draw_cor(axes.cor, ref.Y, res.Y, ref_label=ref.label, label=res.label)
         axes.cor.legend(loc="upper left")
         axes.cor.set_title("Peak performance correlation")
+
+    if args.rcdf:
+        for res in results:
+            draw_rcdf(axes.rcdf, res.Y, label=res.label)
+        axes.rcdf.legend()
+        axes.rcdf.set_title("Peak performance reverse cumulative distribution")
 
     if args.title:
         fig.suptitle(args.title)
@@ -174,6 +201,12 @@ def main():
         action=argparse.BooleanOptionalAction,
         default=False,
         help="draw correlation",
+    )
+    parser.add_argument(
+        "--rcdf",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="draw reverse CDF",
     )
     parser.add_argument(
         "--show",

@@ -19,6 +19,7 @@ dependencies = [
     'xdsl~=0.57.1',
     'strictyaml',
     'tomlkit',
+    'sqlalchemy>=2.0',
 ]
 
 [project.optional-dependencies]
@@ -45,6 +46,7 @@ mlir-backend = "xtc.cli.mlir_backend:main"
 loop-display = "xtc.cli.display_results:main"
 loop-explore = "xtc.cli.explore:main"
 loop-results = "xtc.cli.query_results:main"
+xtc-db-query = "xtc.cli.db_query:main"
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=8", "wheel"]
