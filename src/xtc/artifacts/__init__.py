@@ -9,6 +9,10 @@ from .operations import (
     has_operation,
 )
 
+from .register_default_operations import _register_operations
+
+_register_operations()
+
 from .register_ttile_operations import _register_operations
 from .register_subgraph_operations import (
     _register_operations as _register_subgraph_operations,
