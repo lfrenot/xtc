@@ -41,7 +41,18 @@ def check_version(version: str) -> None:
                 f"tag {release_tag} must build version {expected}, got {version}"
             )
     elif ".dev" not in version:
-        raise RuntimeError(f"development build must have a dev version, got {version}")
+        expected_tag = f"xtc-v{version}"
+        tags = subprocess.run(
+            ["git", "tag", "--points-at", "HEAD", "--list", expected_tag],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        if expected_tag not in tags:
+            raise RuntimeError(
+                "development build must have a dev version or match an exact "
+                f"tag on the current commit, got {version}"
+            )
 
 
 def check_installation(wheel_path: Path, version: str) -> None:
