@@ -13,6 +13,11 @@ on:
         type: boolean
         required: true
         default: true
+      run-pages:
+        description: Build the Pages preview
+        type: boolean
+        required: true
+        default: true
       publish-testpypi:
         description: Publish the package to TestPyPI
         type: boolean
@@ -175,6 +180,7 @@ jobs:
     needs: [build, pr-build]
     if: |
       always() &&
+      (github.event_name != 'workflow_dispatch' || inputs['run-pages']) &&
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       (needs.pr-build.result == 'success' || needs.pr-build.result == 'skipped')
     permissions:
