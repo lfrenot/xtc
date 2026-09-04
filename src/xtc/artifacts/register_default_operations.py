@@ -4,7 +4,7 @@
 #
 from .operations import register_operation
 
-__all__ = []
+__all__: list[str] = []
 
 _matmul_ops = dict(
     Vit_query={"i": 197, "j": 768, "k": 768},

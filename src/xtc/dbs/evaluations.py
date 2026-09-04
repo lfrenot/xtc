@@ -62,6 +62,14 @@ class Operation:
     clsargs: dict[str, Structured]
     payload: Structured
 
+    def args_list(self, key: str) -> list[Any]:
+        vals = self.clsargs[key]
+        if isinstance(vals, dict):
+            return list(vals.values())
+        elif isinstance(vals, list):
+            return vals
+        return [vals]
+
 
 @add_traits(DataClassDict, DataClassDigest)
 @dataclass(frozen=True)
@@ -263,10 +271,11 @@ def get_evaluation(
 def get_tag(
     name: str,
     payload: Structured = "",
-) -> Evaluation:
+) -> Tag:
     return Tag(
         name=name,
-        payload=payload,
+        payload=payload,  # type: ignore
+        # TODO: Christophe
     )
 
 
@@ -318,7 +327,8 @@ class EvaluationsDB:
                 and len(evaluation.results[0].values) > 0
             ):
                 return (id, evaluation)
-        return (None, None)
+        return (None, None)  # type: ignore
+        # TODO: Christophe
 
     def get_filtered_metric_evaluations(
         self,
@@ -362,7 +372,7 @@ class DBEvaluator:
         self,
         db: EvaluationsDB,
         module: Module,
-        payload: Payload = None,
+        payload: Payload = None,  # type: ignore
         cached: bool = False,
         **kwargs: Any,
     ):
@@ -391,7 +401,7 @@ class DBEvaluator:
         if not self.cached:
             return []
         evaluations = self.db.get_payload_evaluations(self.payload)
-        results_map = {k: [] for k in self._metrics}
+        results_map: dict[Any, list] = {k: [] for k in self._metrics}
         for evaluation in reversed(evaluations.values()):
             if evaluation.code != 0:
                 continue

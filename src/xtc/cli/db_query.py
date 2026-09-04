@@ -4,11 +4,11 @@
 #
 import logging
 import argparse
-from argparse import Namespace as NS
+from types import SimpleNamespace as ns
 from typing import Any
 import re
 
-from xtc.runtimes.host import runtime
+from xtc.runtimes.host import HostRuntime
 from xtc.utils.math import mulall
 from xtc.cli.display_results import display_results
 from xtc.utils.dump import dump_plain
@@ -46,7 +46,7 @@ def dump_objs(objs: dict, format: str = "plain", kwargs_list: list[dict] = []):
         )
 
 
-def dump_operations(args: NS):
+def dump_operations(args: ns):
     db = EvaluationsDB(args.db)
     objs = db.get_filtered_operations(
         **(dict(name=args.operator) if args.operator else {}),
@@ -54,7 +54,7 @@ def dump_operations(args: NS):
     dump_objs(objs, args.format)
 
 
-def dump_tags(args: NS):
+def dump_tags(args: ns):
     db = EvaluationsDB(args.db)
     if args.tags:
         objs = {}
@@ -68,7 +68,7 @@ def dump_tags(args: NS):
     dump_objs(objs, args.format)
 
 
-def delete_tag(args: NS):
+def delete_tag(args: ns):
     db = EvaluationsDB(args.db)
     assert args.tag
     answer = input(f"Delete Tag: {args.tag}\nContinue [N/y]?")
@@ -78,7 +78,7 @@ def delete_tag(args: NS):
     print(f"Deleted {len(ids)} Tags.")
 
 
-def create_tags(args: NS):
+def create_tags(args: ns):
     db = EvaluationsDB(args.db)
     for tag_name in args.new_tags:
         plain_tag = get_tag(tag_name)
@@ -86,16 +86,16 @@ def create_tags(args: NS):
         db.create_unique_tag(plain_tag)
 
 
-def get_operation_flop(args: NS) -> int | None:
+def get_operation_flop(args: ns) -> int | None:
     if args.operator and args.op_name and args.dtype:
         operation = get_operation_from_artifacts(
             args.operator, args.op_name, args.dtype
         )
-        return mulall(list(operation.clsargs["dims"].values()))
+        return mulall(operation.args_list("dims"))
     return None
 
 
-def get_evaluations_filters(args: NS, tags: list[str] = []) -> dict[str, Any]:
+def get_evaluations_filters(args: ns, tags: list[str] = []) -> dict[str, Any]:
     platform = (
         get_platform()
         if args.machine is None
@@ -118,7 +118,7 @@ def get_evaluations_filters(args: NS, tags: list[str] = []) -> dict[str, Any]:
 
 
 def get_evaluations(
-    db: EvaluationsDB, args: NS, full: bool = False
+    db: EvaluationsDB, args: ns, full: bool = False
 ) -> dict[int, Evaluation]:
     if args.topk:
         objs = db.get_filtered_metric_evaluations(
@@ -141,7 +141,7 @@ def get_evaluations(
     return objs
 
 
-def list_evaluations(args: NS):
+def list_evaluations(args: ns):
     db = EvaluationsDB(args.db)
     full = args.verbose
     flop = get_operation_flop(args)
@@ -153,8 +153,7 @@ def list_evaluations(args: NS):
         ops_time = [min(e.results[0].values) for e in objs.values()]
         if flop is None:
             ops_flop = [
-                mulall(list(e.payload.operation.clsargs["dims"].values()))
-                for e in objs.values()
+                mulall(e.payload.operation.args_list("dims")) for e in objs.values()
             ]
             kwargs_list = [
                 {"peak": flop / time / args.flops}
@@ -165,13 +164,13 @@ def list_evaluations(args: NS):
     dump_objs(objs, args.format, kwargs_list)
 
 
-def dump_evaluations(args: NS):
+def dump_evaluations(args: ns):
     db = EvaluationsDB(args.db)
     objs = get_evaluations(db, args, full=True)
     dump_objs(objs, "plain")
 
 
-def load_evaluations(args: NS):
+def load_evaluations(args: ns):
     from xtc.dbs.evaluations import (
         Platform,
         Operation,
@@ -206,7 +205,7 @@ def load_evaluations(args: NS):
     db.record_evaluations(evaluations, args.tags)
 
 
-def delete_evaluations(args: NS):
+def delete_evaluations(args: ns):
     db = EvaluationsDB(args.db)
     filter = get_evaluations_filters(args)
     answer = input(f"Delete Evaluations matching: {filter}\nContinue [N/y]?")
@@ -216,7 +215,7 @@ def delete_evaluations(args: NS):
     print(f"Deleted {len(ids)} Evaluations.")
 
 
-def tag_evaluations(args: NS):
+def tag_evaluations(args: ns):
     db = EvaluationsDB(args.db)
     objs = get_evaluations(db, args)
     for idx, obj in objs.items():
@@ -224,7 +223,7 @@ def tag_evaluations(args: NS):
         db.tag_evaluation(idx, args.new_tags)
 
 
-def display_evaluations(args: NS):
+def display_evaluations(args: ns):
     db = EvaluationsDB(args.db)
     results = []
     flop = get_operation_flop(args)
@@ -241,13 +240,13 @@ def display_evaluations(args: NS):
         logger.debug("Results for %s: num: %d", result_tag, len(objs))
         if raw:
             values = [
-                min([v.value for v in eval.results[0].values]) for eval in objs.values()
+                min([v for v in eval.results[0].values]) for eval in objs.values()
             ]
         else:
             values = [min(eval.results[0].values) for eval in objs.values()]
         if not flop:
             ops_flop = [
-                mulall(list(eval.payload.operation.clsargs["dims"].values()))
+                mulall(eval.payload.operation.args_list("dims"))
                 for eval in objs.values()
             ]
             values = [
@@ -255,7 +254,7 @@ def display_evaluations(args: NS):
             ]
         else:
             values = [(flop / time) / args.flops for time in values]
-        result = NS(Y=values, label=f"{result_tag}")
+        result = ns(Y=values, label=f"{result_tag}")
         results.append(result)
     display_results(results, args)
 
@@ -443,46 +442,48 @@ def main():
     if args.debug_sql:
         logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
-    if args.object == "tags" and args.action == "delete":
-        delete_tag(args)
+    n_args = ns(**vars(args))
+
+    if n_args.object == "tags" and n_args.action == "delete":
+        delete_tag(n_args)
         raise SystemExit()
 
-    if args.object == "tags" and args.action == "create":
-        create_tags(args)
+    if n_args.object == "tags" and n_args.action == "create":
+        create_tags(n_args)
         raise SystemExit()
 
-    if hasattr(args, "flops") and hasattr(args, "dtype") and args.flops is None:
-        args.flops = runtime.evaluate_flops(args.dtype)
-        logger.debug("Host Machine evaluated flops: %.3f", args.flops)
+    if hasattr(n_args, "flops") and hasattr(n_args, "dtype") and n_args.flops is None:
+        n_args.flops = HostRuntime.get().evaluate_flops(n_args.dtype)
+        logger.debug("Host Machine evaluated flops: %.3f", n_args.flops)
 
-    if args.tag:
-        if args.tags:
+    if n_args.tag:
+        if n_args.tags:
             raise ValueError(f"options --tag and --tags are incompatible")
-        args.tags = [args.tag]
+        n_args.tags = [n_args.tag]
 
-    if args.object == "tags":
-        assert args.action == "list"
-        dump_tags(args)
+    if n_args.object == "tags":
+        assert n_args.action == "list"
+        dump_tags(n_args)
         raise SystemExit()
-    elif args.object == "operations":
-        dump_operations(args)
+    elif n_args.object == "operations":
+        dump_operations(n_args)
         raise SystemExit()
-    elif args.object == "evaluations":
-        if args.action == "list":
-            if args.best and not args.topk:
-                args.topk = 1
-            list_evaluations(args)
-        elif args.action == "dump":
-            dump_evaluations(args)
-        elif args.action == "load":
-            load_evaluations(args)
-        elif args.action == "delete":
-            delete_evaluations(args)
+    elif n_args.object == "evaluations":
+        if n_args.action == "list":
+            if n_args.best and not n_args.topk:
+                n_args.topk = 1
+            list_evaluations(n_args)
+        elif n_args.action == "dump":
+            dump_evaluations(n_args)
+        elif n_args.action == "load":
+            load_evaluations(n_args)
+        elif n_args.action == "delete":
+            delete_evaluations(n_args)
         else:
-            assert args.action == "tag"
-            tag_evaluations(args)
-    elif args.object == "display":
-        display_evaluations(args)
+            assert n_args.action == "tag"
+            tag_evaluations(n_args)
+    elif n_args.object == "display":
+        display_evaluations(n_args)
 
 
 if __name__ == "__main__":

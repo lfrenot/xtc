@@ -104,7 +104,7 @@ def draw_cor(
         ax.set_xlabel(ref_label)
 
 
-def draw_rcdf(ax, Y, bins=20, label=None):
+def draw_rcdf(ax: Any, Y: Sequence[float], bins: int = 20, label: str | None = None):
     ax.hist(
         Y,
         bins=bins,

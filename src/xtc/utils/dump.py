@@ -67,10 +67,10 @@ def _flatten_plain(payload: Any) -> tuple[list[str], list[dict[str, Any]]]:
             obj[key] = payload
 
     assert isinstance(payload, list)
-    header = []
-    rows = []
+    header: list[str] = []
+    rows: list[dict] = []
     for row in payload:
-        obj = {}
+        obj: dict[str, Any] = {}
         _flatten("", row, obj)
         header = list({**dict.fromkeys(header), **dict.fromkeys(obj)})
         rows.append(obj)

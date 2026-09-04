@@ -24,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import (
     aliased,
-    declarative_base,
+    DeclarativeBase,
     relationship,
     Session,
     mapped_column,
@@ -58,7 +58,9 @@ __all__ = [
 
 T = TypeVar("T")
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 class ORMDict:
@@ -120,7 +122,7 @@ class ORMUniqueMixin:
 class Version(Base):
     __tablename__ = "version"
     id: Mapped[int] = mapped_column(primary_key=True)
-    schema_version: Mapped[int]
+    schema_version: Mapped[int] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
@@ -133,9 +135,9 @@ class Platform(Base, ORMDigestMixin):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
-    hostname: Mapped[str]
-    system: Mapped[str]
-    target: Mapped[str]
+    hostname: Mapped[str] = mapped_column()
+    system: Mapped[str] = mapped_column()
+    target: Mapped[str] = mapped_column()
     digest: Mapped[str] = mapped_column(String, unique=True, index=True)
 
     @classmethod
@@ -164,11 +166,11 @@ class Compiler(Base, ORMDigestMixin):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
-    name: Mapped[str]
-    version: Mapped[str]
-    target: Mapped[str]
-    threads: Mapped[int]
-    backend: Mapped[str]
+    name: Mapped[str] = mapped_column()
+    version: Mapped[str] = mapped_column()
+    target: Mapped[str] = mapped_column()
+    threads: Mapped[int] = mapped_column()
+    backend: Mapped[str] = mapped_column()
     digest: Mapped[str] = mapped_column(String, unique=True, index=True)
 
     @classmethod
@@ -201,9 +203,9 @@ class Operation(Base, ORMDigestMixin):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
-    name: Mapped[str]
-    clsname: Mapped[str]
-    clsargs: Mapped[str]
+    name: Mapped[str] = mapped_column()
+    clsname: Mapped[str] = mapped_column()
+    clsargs: Mapped[str] = mapped_column()
     digest: Mapped[str] = mapped_column(String, unique=True, index=True)
 
     @classmethod
@@ -222,7 +224,11 @@ class Operation(Base, ORMDigestMixin):
             return deserialize_data(session, DOperation, self.digest)
         else:
             return DOperation(
-                name=self.name, clsname=self.clsname, clsargs=self.clsargs, payload=""
+                name=self.name,
+                clsname=self.clsname,
+                clsargs=self.clsargs,  # type: ignore
+                payload="",
+                # TODO: Christophe
             )
 
 
@@ -233,8 +239,8 @@ class Schedule(Base, ORMDigestMixin):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
-    clsname: Mapped[str]
-    clsargs: Mapped[str]
+    clsname: Mapped[str] = mapped_column()
+    clsargs: Mapped[str] = mapped_column()
     digest: Mapped[str] = mapped_column(String, unique=True, index=True)
 
     @classmethod
@@ -251,7 +257,12 @@ class Schedule(Base, ORMDigestMixin):
         if full:
             return deserialize_data(session, DSchedule, self.digest)
         else:
-            return DSchedule(clsname=self.clsname, clsargs=self.clsargs, payload="")
+            return DSchedule(
+                clsname=self.clsname,
+                clsargs=self.clsargs,  # type: ignore
+                # TODO: Christophe
+                payload="",
+            )
 
 
 class Payload(Base, ORMUniqueMixin):
@@ -321,8 +332,8 @@ class Evaluation(Base):
         ForeignKey("payloads.id"), nullable=False, index=True
     )
     payload: Mapped["Payload"] = relationship(backref="payloads")
-    code: Mapped[int]
-    msg: Mapped[str]
+    code: Mapped[int] = mapped_column()
+    msg: Mapped[str] = mapped_column()
     results: Mapped[list["Result"]] = relationship(
         "Result",
         backref="evaluation",
@@ -390,7 +401,7 @@ class Result(Base):
 class ResultValue(Base):
     __tablename__ = "result_values"
     id: Mapped[int] = mapped_column(primary_key=True)
-    value: Mapped[float]
+    value: Mapped[float] = mapped_column()
     result_id: Mapped[int] = mapped_column(ForeignKey("results.id"))
 
 
@@ -423,7 +434,8 @@ class Tag(Base, ORMDigestMixin):
         else:
             return DTag(
                 name=self.name,
-                payload="",
+                payload="",  # type: ignore
+                # TODO: Christophe
             )
 
 
@@ -532,7 +544,7 @@ class EvaluationsORM:
     def _open_db_with_migrations(self, allow_migration: bool = False):
         assert self._db_file.exists()
         engine = self._db_create_engine(create=False)
-        Base.metadata.create_all(engine, tables=[Version.__table__])
+        Base.metadata.create_all(engine, tables=[Version.__table__])  # type: ignore
         with Session(engine) as session:
             actual_version = self._get_actual_version(session)
 
@@ -553,7 +565,7 @@ class EvaluationsORM:
                 self._set_version(session, self.CURRENT_VERSION)
             return engine
 
-    def create_unique_tag(self, tag: Tag):
+    def create_unique_tag(self, tag: DTag):
         with Session(self._engine) as s:
             stmt = select(Tag).where(Tag.name == tag.name)
             obj = s.execute(stmt).scalar_one_or_none()
@@ -673,8 +685,11 @@ class EvaluationsORM:
             .order_by(et_sort.created_at)
         )
         rows = session.execute(stmt).scalars().all()
+        evals: dict[int, DEvaluation] = {}
         if raw:
-            evals = {e.id: e for e in rows}
+            for e in rows:
+                assert isinstance(e, DEvaluation)
+                evals[e.id] = e
         else:
             evals = {e.id: e.as_plain(session, full=full) for e in rows}
         return evals
@@ -725,8 +740,11 @@ class EvaluationsORM:
             .order_by(et_sort.created_at)
         )
         rows = session.execute(stmt).scalars().all()
+        evals: dict[int, DEvaluation] = {}
         if raw:
-            evals = {e.id: e for e in rows}
+            for e in rows:
+                assert isinstance(e, DEvaluation)
+                evals[e.id] = e
         else:
             evals = {e.id: e.as_plain(session, full=full) for e in rows}
         return evals
@@ -746,10 +764,14 @@ class EvaluationsORM:
             )
         )
         rows = session.execute(stmt).scalars().all()
+        evals: dict[int, DEvaluation] = {}
         if raw:
-            return {e.id: e for e in rows}
+            for e in rows:
+                assert isinstance(e, DEvaluation)
+                evals[e.id] = e
         else:
-            return {e.id: e.as_plain(session, full=full) for e in rows}
+            evals = {e.id: e.as_plain(session, full=full) for e in rows}
+        return evals
 
     def get_filtered_evaluations(
         self, full: bool = False, raw: bool = False, **kwargs: Any
@@ -822,7 +844,11 @@ class EvaluationsORM:
         )
         rows = session.execute(stmt).scalars().all()
         if raw:
-            return {t.id: t for t in rows}
+            tags: dict[int, DTag] = {}
+            for t in rows:
+                assert isinstance(t, DTag)
+                tags[t.id] = t
+            return tags
         else:
             return {t.id: t.as_plain(session) for t in rows}
 
@@ -841,14 +867,17 @@ class EvaluationsORM:
     @classmethod
     def from_plain(cls, session: Session, target_cls: str, value: Any) -> Any:
         objcls = cls._class_map[target_cls.lower()]
+        assert hasattr(objcls, "from_plain")
         return objcls.from_plain(session, value)
 
     def get_from_digest(self, target_cls: str, digest: str) -> Any:
         with Session(self._engine) as s:
             objcls = self._class_map[target_cls.lower()]
+            assert hasattr(objcls, "digest")
             stmt = select(objcls).where(objcls.digest == digest)
             rows = s.execute(stmt).scalars().all()
             assert len(rows) == 1
+            assert hasattr(rows[0], "as_plain")
             return rows[0].as_plain(s)
 
     def dump_dict(
@@ -887,7 +916,8 @@ class EvaluationsORM:
                         id=tag.id,
                         created_at=deserialize_iso(tag.created_at),
                         updated_at=deserialize_iso(tag.updated_at),
-                        **tag.as_plain(session).to_dict(),
+                        **tag.as_plain(session).to_dict(),  # type: ignore [attr-defined]
+                        # TODO: Christophe
                     )
                     if verbose
                     else tag.name
@@ -910,7 +940,7 @@ class EvaluationsORM:
                     selectinload(Evaluation.results).selectinload(Result.values),
                 )
                 .join(Evaluation.tag_links)
-                .join(EvaluationTag.tag)
+                .join(EvaluationTag.tag_id)
                 .where(
                     *([Tag.name == tag_name] if tag_name is not None else []),
                     *[Evaluation.payload.has(condition) for condition in conditions],
@@ -922,12 +952,12 @@ class EvaluationsORM:
                     {
                         "tags": [
                             dict(
-                                name=l.tag.name,
-                                created_at=deserialize_iso(l.tag.created_at),
-                                updated_at=deserialize_iso(l.tag.updated_at),
+                                name=l.tag_id,
+                                created_at=deserialize_iso(l.created_at),
+                                updated_at=deserialize_iso(l.updated_at),
                             )
                             if verbose
-                            else l.tag.name
+                            else l.tag_id
                             for l in e.tag_links
                         ],
                         **(
