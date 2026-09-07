@@ -467,7 +467,7 @@ class PackedOperatorWrapper:
                 cmd = (
                     f"{cc_command(self._arch)} {sh_opts} {opts} "
                     f"{' '.join(object_fnames)}  "
-                    f"{packed_lib_fname}.a "
+                    f"{relative_to(packed_lib_fname, output_dir)}.a "
                     f"-o {unpacked_lib_base}{ext}"
                 )
                 p = subprocess.run(
