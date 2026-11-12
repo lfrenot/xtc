@@ -16,6 +16,7 @@ from xtc.utils.math import pow2divisor
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
 from xtc.schedules.plain_schedule import PlainNodeSchedule, PlainNodeScheduler
 from xtc.schedules.loop_nest import LoopNest, LoopNestNode
+from xtc.schedules.exceptions import ScheduleValidationError
 from xtc.schedules.loop_nest_builder import LoopNestBuilder
 import xtc.backends.tvm as backend
 import xtc.itf as itf
@@ -64,9 +65,28 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         self, block: str, dims: list[str], sched: LoopNest, node: LoopNestNode
     ):
         assert node is not None, "unexpected undefined node"
+        unavailable_tiles = [
+            axis for axis, tiles in node.tiles.items() if tiles and axis not in dims
+        ]
+        if unavailable_tiles:
+            raise ScheduleValidationError(
+                f"TVM cannot tile axis/axes {', '.join(unavailable_tiles)} "
+                f"in split scope '{node.root}': the loops are outside that scope."
+            )
+        for axis in node.splits:
+            if axis not in dims:
+                raise ScheduleValidationError(
+                    f"TVM cannot split axis '{axis}' in scope '{node.root}': "
+                    "the loop is outside that scope."
+                )
         sch = self._sch_var
         outf = self._outf
-        print(f"{', '.join(dims)}, = {sch}.get_loops({block})", file=outf)
+        if dims:
+            if node.is_root:
+                print(f"{', '.join(dims)}, = {sch}.get_loops({block})", file=outf)
+            else:
+                print(f"__loops = {sch}.get_loops({block})", file=outf)
+                print(f"{', '.join(dims)}, = __loops[-{len(dims)}:]", file=outf)
         if node.fuse_consumer_at:
             print(f"O_F0 = {sch}.get_consumers({block})[0]", file=outf)
         if node.pack_at:
@@ -104,6 +124,7 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
             )
         outer = [axis for axis in node.interchange if axis in axes]
         reorder = outer + axes
+
         if node.splits:
             split_axis = list(node.splits)[0]
             reorder = outer + [split_axis] + axes
@@ -163,7 +184,7 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
             for idx, split in enumerate(splits):
                 split_block = f"{block}_{split_axis}_{idx}"
                 print(
-                    f"{split_block} = {block}_SPLITS[{idx}]",
+                    f"{split_block} = {sch}.get_sblock({block}_SPLITS[{idx}])",
                     file=outf,
                 )
                 self._dump_schedule_node(split_block, inner, sched, node.children[idx])
@@ -173,7 +194,179 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         sched = scheduler.get_loop_nest()
         sched = tvm_update_loopnest_for_codegen(sched)
         sched.check()
+        sched = tvm_plan_split_tiles(sched)
         self._dump_schedule(sched)
+
+
+def tvm_plan_split_tiles(sched: LoopNest) -> LoopNest:
+    """Hoist matching non-split tiles from split branches to their parent."""
+    root = sched.root_node
+    if root is None:
+        return sched
+
+    def plan(node: LoopNestNode) -> LoopNestNode:
+        children = [plan(child) for child in node.children]
+        tiles = deepcopy(node.tiles)
+        interchange = deepcopy(node.interchange)
+        if node.splits:
+            if len(node.splits) != 1:
+                raise ScheduleValidationError(
+                    "TVM supports splitting only one axis per scope."
+                )
+            split_axes = set(node.splits)
+            descendant_axes = list(
+                dict.fromkeys(
+                    axis
+                    for child in children
+                    for axis, tile_config in child.tiles.items()
+                    if tile_config and axis not in split_axes
+                )
+            )
+            for axis in descendant_axes:
+                requirements = [child.tiles.get(axis, {}) for child in children]
+                sizes = [list(requirement.values()) for requirement in requirements]
+                for branch_sizes in sizes:
+                    if any(
+                        outer % inner
+                        for outer, inner in zip(branch_sizes, branch_sizes[1:])
+                    ):
+                        raise ScheduleValidationError(
+                            f"TVM requires nested tile sizes to divide evenly for "
+                            f"non-split axis '{axis}' in split scope '{node.root}'."
+                        )
+
+                # Only the common outer prefix must be scheduled above the split.
+                # Inner tiles remain branch-local, even when branch tile depths or
+                # loop order differ.
+                common_depth = min(map(len, sizes))
+                for index in range(common_depth):
+                    if any(branch[index] != sizes[0][index] for branch in sizes[1:]):
+                        common_depth = index
+                        break
+                if not common_depth:
+                    if any(sizes):
+                        raise ScheduleValidationError(
+                            f"TVM requires matching tiles for non-split axis '{axis}' "
+                            f"across split branches in '{node.root}'."
+                        )
+                    continue
+
+                common_sizes = sizes[0][:common_depth]
+                existing = tiles.get(axis, {})
+                existing_sizes = list(existing.values())
+                if existing_sizes and existing_sizes != common_sizes:
+                    raise ScheduleValidationError(
+                        f"TVM cannot reconcile tiles for non-split axis '{axis}' "
+                        f"in split scope '{node.root}'."
+                    )
+                if not existing:
+                    tiles[axis] = {
+                        name: size
+                        for name, size in list(requirements[0].items())[:common_depth]
+                    }
+                canonical_names = list(tiles[axis])
+                rewritten_children = []
+                for child, requirement in zip(children, requirements):
+                    shared_names = list(requirement)[:common_depth]
+                    name_map = dict(zip(shared_names, canonical_names))
+                    remaining_tiles = {
+                        key: value for key, value in child.tiles.items() if key != axis
+                    }
+                    remaining = {
+                        name: size
+                        for name, size in requirement.items()
+                        if name not in shared_names
+                    }
+                    if remaining:
+                        # A residual tile is nested inside the last hoisted tile
+                        # loop, not the original dimension loop.
+                        remaining_tiles[canonical_names[-1]] = remaining
+                    rewritten_children.append(
+                        _copy_loop_node(
+                            child,
+                            tiles=remaining_tiles,
+                            interchange=[
+                                name_map.get(name, name) for name in child.interchange
+                            ],
+                            vectorize=[
+                                name_map.get(name, name) for name in child.vectorize
+                            ],
+                            parallelize=[
+                                name_map.get(name, name) for name in child.parallelize
+                            ],
+                            unroll={
+                                name_map.get(name, name): value
+                                for name, value in child.unroll.items()
+                            },
+                            buffer_at={
+                                name_map.get(name, name): value
+                                for name, value in child.buffer_at.items()
+                            },
+                            pack_at={
+                                name_map.get(name, name): value
+                                for name, value in child.pack_at.items()
+                            },
+                            fuse_producer_at={
+                                name_map.get(name, name): value
+                                for name, value in child.fuse_producer_at.items()
+                            },
+                            fuse_consumer_at=[
+                                name_map.get(name, name)
+                                for name in child.fuse_consumer_at
+                            ],
+                            external_at={
+                                name_map.get(name, name): value
+                                for name, value in child.external_at.items()
+                            },
+                        )
+                    )
+                children = rewritten_children
+
+        return _copy_loop_node(
+            node, tiles=tiles, interchange=interchange, children=children
+        )
+
+    return LoopNest(abstract_dims=sched.abstract_dims, root_node=plan(root))
+
+
+def _copy_loop_node(
+    node: LoopNestNode,
+    *,
+    tiles: dict[str, dict[str, int]] | None = None,
+    children: list[LoopNestNode] | None = None,
+    interchange: list[str] | None = None,
+    vectorize: list[str] | None = None,
+    parallelize: list[str] | None = None,
+    unroll: dict[str, int] | None = None,
+    buffer_at: dict[str, str | None] | None = None,
+    pack_at: dict[str, tuple[int, str | None, bool]] | None = None,
+    fuse_producer_at: dict[str, int] | None = None,
+    fuse_consumer_at: list[str] | None = None,
+    external_at: dict[str, str] | None = None,
+) -> LoopNestNode:
+    copied = LoopNestNode(
+        root=node.root,
+        tiles=deepcopy(node.tiles if tiles is None else tiles),
+        splits=deepcopy(node.splits),
+        interchange=deepcopy(node.interchange if interchange is None else interchange),
+        vectorize=deepcopy(node.vectorize if vectorize is None else vectorize),
+        parallelize=deepcopy(node.parallelize if parallelize is None else parallelize),
+        unroll=deepcopy(node.unroll if unroll is None else unroll),
+        buffer_at=deepcopy(node.buffer_at if buffer_at is None else buffer_at),
+        pack_at=deepcopy(node.pack_at if pack_at is None else pack_at),
+        fuse_producer_at=deepcopy(
+            node.fuse_producer_at if fuse_producer_at is None else fuse_producer_at
+        ),
+        fuse_consumer_at=deepcopy(
+            node.fuse_consumer_at if fuse_consumer_at is None else fuse_consumer_at
+        ),
+        external_at=deepcopy(node.external_at if external_at is None else external_at),
+        split_origin=deepcopy(node.split_origin),
+    )
+    for child in node.children if children is None else children:
+        object.__setattr__(child, "parent", None)
+        copied.add_child(child)
+    return copied
 
 
 def tvm_cache_read_factor_offset(

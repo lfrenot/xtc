@@ -14,7 +14,7 @@ def loop_partition_rebased(
     sch: tvm.s_tir.Schedule,
     loop: Any,
     factors: list[int | None],
-) -> tuple[tvm.s_tir.Schedule, list[Any]]:
+) -> tuple[tvm.s_tir.Schedule, list[str]]:
     """Partition a loop and rebase each resulting loop to start at zero.
 
     TVM's loop_partition preserves the original loop coordinates, while several
@@ -22,8 +22,8 @@ def loop_partition_rebased(
     the partition loops with a zero minimum and add the old minimum to every use
     of their induction variable.
 
-    Rebuilding the IR invalidates schedule RVs, so child blocks are reacquired
-    by name and returned with the new schedule.
+    Rebuilding the IR invalidates schedule RVs, so child block names are
+    returned for reacquisition on the rebuilt schedule.
     """
     working_on = sch.func_working_on
     assert working_on is not None
@@ -79,8 +79,7 @@ def loop_partition_rebased(
 
     new_sch = tvm.s_tir.Schedule(new_mod)
     new_sch.work_on(working_on.name_hint)
-    new_children = [new_sch.get_sblock(name) for name in child_names]
-    return new_sch, new_children
+    return new_sch, child_names
 
 
 def _depends_on(expr: Any, var: Any, analyzer: Any) -> bool:
@@ -368,6 +367,7 @@ def decompose_reduction_initializers(
 
     analyzer = tvm.arith.Analyzer()
     partitioned_blocks: list[str] = []
+
     for block_name in dict.fromkeys(reduction_blocks):
         block = sch.get_sblock(block_name)
         block_stmt = cast(Any, sch.get(block))
@@ -415,10 +415,52 @@ def decompose_reduction_initializers(
             ),
             None,
         )
-        # Loop partitioning introduces scope blocks that hide an outer
-        # reduction loop from TVM's schedule primitive. Handle those blocks in
-        # a final structural rewrite after all directly schedulable reductions.
-        if reduction_loop is None:
+
+        # Re-read ancestry after each schedule primitive, which may rebuild
+        # the IR and replace loop nodes.
+        class ReductionAncestryCollector(tvm.tirx.stmt_functor.StmtVisitor):
+            def __init__(self, target_name: str) -> None:
+                super().__init__()
+                self.target_name = target_name
+                self.loops: list[Any] = []
+                self.ancestry: list[Any] = []
+
+            @override
+            def visit_for_(self, op: Any) -> None:
+                self.loops.append(op)
+                super().visit_for_(op)
+                self.loops.pop()
+
+            @override
+            def visit_block_realize_(self, op: Any) -> None:
+                if op.block.name_hint == self.target_name:
+                    self.ancestry.extend(self.loops)
+                super().visit_block_realize_(op)
+
+        ancestry_collector = ReductionAncestryCollector(block_name)
+        ancestry_collector.visit_stmt(current_func.body)
+        full_reduction_loops = [
+            loop
+            for loop in ancestry_collector.ancestry
+            if any(
+                _depends_on(value, loop.loop_var, analyzer)
+                for value in reduction_values
+            )
+        ]
+        outer_reduction_loop = full_reduction_loops[0] if full_reduction_loops else None
+
+        # Partition scope blocks can hide an outer reduction loop from
+        # get_loops(). Decomposing at the first visible reduction loop would
+        # then initialize once per outer reduction iteration, so use the
+        # structural fallback whenever the true outermost loop is not visible.
+        if (
+            reduction_loop is None
+            or outer_reduction_loop is None
+            or not any(
+                cast(Any, sch.get(loop)).loop_var.same_as(outer_reduction_loop.loop_var)
+                for loop in loops
+            )
+        ):
             partitioned_blocks.append(block_name)
         else:
             sch.decompose_reduction(block, reduction_loop)
