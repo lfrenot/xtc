@@ -1,0 +1,50 @@
+constraints:
+  - RoB := 224
+  - v_elts := 16
+  - max_uk_vecs := 32
+  - opt_ilp := 8
+  - fr == fvr * v_elts
+  - wu1 * hr * br * fvr + sr * rr * cr * fvr + 1 <= max_uk_vecs
+  - wu2 * hr * br * fvr + sr * rr * cr * fvr + 1 <= max_uk_vecs
+  - ilp(fvr, wu1*hr*br*cr*rr*sr, wr1*hc*bc, fc, cc*rc*sc, RoB) >= opt_ilp
+  - ilp(fvr, wu2*hr*br*cr*rr*sr, wr2*hc*bc, fc, cc*rc*sc, RoB) >= opt_ilp
+schedule:
+  b: parallelize
+  h: parallelize
+  f:
+  r:
+  s:
+  c:
+  $: pack(C)=pack_c
+  w[:wS]:
+    b#bc:
+    h#hc:
+    f#fc:
+    r#rc:
+    s#sc:
+    c#cc:
+    $ uk1:
+    w#wr1:
+    r#rr: unroll
+    s#sr: unroll
+    c#cr: unroll
+    b#br: unroll
+    h#hr: unroll
+    w#wu1: unroll
+    f#fr: vectorize
+  w[wS:]:
+    b#bc:
+    h#hc:
+    f#fc:
+    r#rc:
+    s#sc:
+    c#cc:
+    $ uk2:
+    w#wr2:
+    r#rr: unroll
+    s#sr: unroll
+    c#cr: unroll
+    b#br: unroll
+    h#hr: unroll
+    w#wu2: unroll
+    f#fr: vectorize

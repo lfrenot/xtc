@@ -1,0 +1,50 @@
+constraints:
+  - sr <= 16
+  - rr <= 16
+  - cr <= 16
+  - br <= 16
+  - wr <= 16
+  - hu1 <= 16
+  - hu2 <= 16
+  - sr * rr * cr * br * wr * hu1 <= 64
+  - sr * rr * cr * br * wr * hu2 <= 64
+schedule:
+  b: parallelize
+  w: parallelize
+  f:
+  s:
+  r:
+  c:
+  $: pack(C)=pack_c
+  h[:hS]:
+    b#bc:
+    w#wc:
+    f#fc:
+    s#sc:
+    r#rc:
+    c#cc:
+    $ uk1:
+    h#hr1:
+    s#sr: unroll
+    r#rr: unroll
+    c#cr: unroll
+    b#br: unroll
+    w#wr: unroll
+    h#hu1: unroll
+    f#fr: vectorize
+  h[hS:]:
+    b#bc:
+    w#wc:
+    f#fc:
+    s#sc:
+    r#rc:
+    c#cc:
+    $ uk2:
+    h#hr2:
+    s#sr: unroll
+    r#rr: unroll
+    c#cr: unroll
+    b#br: unroll
+    w#wr: unroll
+    h#hu2: unroll
+    f#fr: vectorize
