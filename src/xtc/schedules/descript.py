@@ -244,6 +244,10 @@ class ScheduleInterpreter:
                 if isinstance(x, str):
                     node.constraints.append(f"{x} <= {y}")
                 node.constraints.append(f"{inner_size} + {x} == {y}")
+            elif x==0:
+                inner_size = y
+            else:
+                inner_size = y - x
 
         # i[:z:]
         else:
@@ -271,11 +275,15 @@ class ScheduleInterpreter:
                     .replace(_NODE_SEP, "")
                 )
                 previous_cut[axis_name] = new_cut
-                if len(last_split) > 0:
-                    a, b = last_split[0]
-                    node.constraints.append(f"{a} <= {b}")
                 last_split.append((new_cut, y))
+                node.constraints.append(f"{z} <= {new_cut}")
                 node.constraints.append(f"{z} + {x} == {new_cut}")
+            inner_size = z
+
+        if isinstance(x, str):
+            node.enum_vars.add(x)
+        if isinstance(inner_size, str):
+            node.enum_vars.add(inner_size)
 
         # Create a child node for the nested schedule
         child_node = ParameterLoopNestNode(
@@ -284,6 +292,9 @@ class ScheduleInterpreter:
             split_origin=ParameterSplitOrigin(axis=axis_name, start=x, end=y),
         )
         node.add_child(child_node)
+
+        new_axes = deepcopy(axes)
+        new_axes[item.axis] = [inner_size]
 
         # TODO: is this the correct footprint?
         if current_size is not None:
@@ -295,7 +306,7 @@ class ScheduleInterpreter:
             node=child_node,
             root=new_root_name,
             head=[axis_name],
-            axes=deepcopy(axes),
+            axes=new_axes,
         )
 
     def _interpret_tile(

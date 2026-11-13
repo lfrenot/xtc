@@ -1087,9 +1087,14 @@ try:
             self._loop_nest = loop_nest
             input_constraints = loop_nest.collect_constraints()
             self._orders: dict[str, list] = {}
-            self._constraints = (
-                constraints + input_constraints if constraints else input_constraints
+            self._constraints = list(
+                dict.fromkeys(
+                    constraints + input_constraints
+                    if constraints
+                    else input_constraints
+                )
             )
+            self._enum_vars = loop_nest.collect_enum_vars()
             self._footprints(tensors, accesses)
             self._initialized = False
             if initialize:
@@ -1143,7 +1148,9 @@ try:
             constraints, self.constants = constraints_from_str(
                 list(self._constraints), context=context
             )
-            properties, constraints = hypergraph(constraints, context=context)
+            properties, constraints = hypergraph(
+                constraints, context=context, enumerate_vars=self._enum_vars
+            )
             methods = solve_with_z3(list(context.variables), properties, constraints)
             enumerations = execute_static(methods, properties, constraints)
             self._context = context

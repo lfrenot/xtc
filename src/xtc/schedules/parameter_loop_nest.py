@@ -129,6 +129,7 @@ class ParameterLoopNestNode(Node["ParameterLoopNestNode"]):
     fuse_producer_at: dict[str, int] = field(default_factory=dict)
     fuse_consumer_at: list[str] = field(default_factory=list)
     constraints: list[str] = field(default_factory=list)
+    enum_vars: set[str] = field(default_factory=set)
     _levels: dict[str, dict[str, literal]] = field(default_factory=dict)
 
     def apply_sample(self, sample: dict[str, int]) -> LoopNestNode:
@@ -479,3 +480,9 @@ class ParameterLoopNest:
         for node in self.nodes:
             constraints += node.constraints
         return constraints
+
+    def collect_enum_vars(self) -> list[str]:
+        enum_vars = set()
+        for node in self.nodes:
+            enum_vars |= node.enum_vars
+        return enum_vars
