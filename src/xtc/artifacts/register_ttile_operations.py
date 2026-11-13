@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
+# Only the convolution sizes evaluated in the Ttile paper (Tollenaere et al.,
+# "Autotuning Convolutions Is Easier Than You Think", TACO 2023, Fig. 8):
+# Yolo9000 and ResNet18. MobilNet and the matmul sizes of prob_sizes are not
+# registered.
 from xtc.schedules.ttile.prob_sizes import (
     ddsizes_Yolo,
-    ddsizes_MobilNet,
     ddsizes_RN18,
-    ddsizes_matmul,
 )
 
 from .operations import register_operation
@@ -21,7 +23,7 @@ def _register_conv2d_ops():
         r="h",
         s="w",
     )
-    for group in [ddsizes_Yolo, ddsizes_MobilNet, ddsizes_RN18]:
+    for group in [ddsizes_Yolo, ddsizes_RN18]:
         for name, params in group.items():
             register_operation(
                 "conv2d",
@@ -31,16 +33,5 @@ def _register_conv2d_ops():
             )
 
 
-def _register_matmul_ops():
-    for group in [ddsizes_matmul]:
-        for name, params in group.items():
-            register_operation(
-                "matmul",
-                name,
-                {k: params[k] for k in ["i", "j", "k"]},
-            )
-
-
 def _register_operations():
     _register_conv2d_ops()
-    _register_matmul_ops()
